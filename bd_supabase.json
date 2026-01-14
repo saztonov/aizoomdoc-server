@@ -1,0 +1,2330 @@
+[
+    {
+      "jsonb_build_object": {
+        "enums": null,
+        "views": null,
+        "tables": {
+          "jobs": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "client_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "document_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "document_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "task_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "''::text",
+                "ordinal_position": 5
+              },
+              {
+                "name": "status",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "'queued'::text",
+                "ordinal_position": 6
+              },
+              {
+                "name": "progress",
+                "type": "real",
+                "udt_name": "float4",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "0",
+                "ordinal_position": 7
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 8
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 9
+              },
+              {
+                "name": "error_message",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 10
+              },
+              {
+                "name": "engine",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "''::text",
+                "ordinal_position": 11
+              },
+              {
+                "name": "r2_prefix",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 12
+              },
+              {
+                "name": "node_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 13
+              }
+            ],
+            "comment": "OCR задачи обработки документов",
+            "column_comments": {
+              "node_id": "ID узла дерева документа (для связи OCR результатов с деревом проектов)",
+              "document_id": "Хеш PDF файла для идентификации"
+            }
+          },
+          "job_files": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "job_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "file_type",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "r2_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "file_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 5
+              },
+              {
+                "name": "file_size",
+                "type": "bigint",
+                "udt_name": "int8",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "0",
+                "ordinal_position": 6
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 7
+              }
+            ],
+            "comment": "Файлы связанные с OCR задачами",
+            "column_comments": null
+          },
+          "node_files": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "node_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "file_type",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "r2_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "file_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 5
+              },
+              {
+                "name": "file_size",
+                "type": "bigint",
+                "udt_name": "int8",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "0",
+                "ordinal_position": 6
+              },
+              {
+                "name": "mime_type",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'application/octet-stream'::text",
+                "ordinal_position": 7
+              },
+              {
+                "name": "metadata",
+                "type": "jsonb",
+                "udt_name": "jsonb",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'{}'::jsonb",
+                "ordinal_position": 8
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 9
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 10
+              }
+            ],
+            "comment": "Все файлы привязанные к узлам дерева (PDF, аннотации, markdown, кропы)",
+            "column_comments": {
+              "r2_key": "Ключ объекта в R2 storage",
+              "metadata": "Метаданные: version, page_index для кропов и т.д.",
+              "file_type": "Тип файла: pdf, annotation, result_md, result_zip, crop, image, ocr_html, result_json, crops_folder"
+            }
+          },
+          "tree_nodes": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "parent_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "client_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "node_type",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 5
+              },
+              {
+                "name": "code",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 6
+              },
+              {
+                "name": "version",
+                "type": "integer",
+                "udt_name": "int4",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "1",
+                "ordinal_position": 7
+              },
+              {
+                "name": "status",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'active'::text",
+                "ordinal_position": 8
+              },
+              {
+                "name": "attributes",
+                "type": "jsonb",
+                "udt_name": "jsonb",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'{}'::jsonb",
+                "ordinal_position": 9
+              },
+              {
+                "name": "sort_order",
+                "type": "integer",
+                "udt_name": "int4",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "0",
+                "ordinal_position": 10
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 11
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 12
+              },
+              {
+                "name": "pdf_status",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'unknown'::text",
+                "ordinal_position": 13
+              },
+              {
+                "name": "pdf_status_message",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 14
+              },
+              {
+                "name": "pdf_status_updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 15
+              },
+              {
+                "name": "is_locked",
+                "type": "boolean",
+                "udt_name": "bool",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "false",
+                "ordinal_position": 16
+              }
+            ],
+            "comment": "Дерево проектов - иерархическая структура узлов",
+            "column_comments": {
+              "is_locked": "Флаг блокировки документа от изменений (удаление, переименование, изменение блоков, запуск OCR)",
+              "node_type": "Тип узла: client, project, section, stage, task, document",
+              "attributes": "Дополнительные атрибуты узла (JSON)"
+            }
+          },
+          "qa_messages": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "conversation_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "role",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "content",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "meta",
+                "type": "jsonb",
+                "udt_name": "jsonb",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'{}'::jsonb",
+                "ordinal_position": 5
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 6
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "qa_settings": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "client_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "gemini_api_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "supabase_url",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "supabase_anon_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 5
+              },
+              {
+                "name": "r2_account_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 6
+              },
+              {
+                "name": "r2_access_key_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 7
+              },
+              {
+                "name": "r2_secret_access_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 8
+              },
+              {
+                "name": "r2_bucket_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 9
+              },
+              {
+                "name": "default_model",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'gemini-3-flash-preview'::text",
+                "ordinal_position": 10
+              },
+              {
+                "name": "settings",
+                "type": "jsonb",
+                "udt_name": "jsonb",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'{}'::jsonb",
+                "ordinal_position": 11
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 12
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 13
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "stage_types": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "udt_name": "int4",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "nextval('stage_types_id_seq'::regclass)",
+                "ordinal_position": 1
+              },
+              {
+                "name": "code",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "sort_order",
+                "type": "integer",
+                "udt_name": "int4",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "0",
+                "ordinal_position": 4
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "app_settings": {
+            "columns": [
+              {
+                "name": "key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 1
+              },
+              {
+                "name": "value",
+                "type": "jsonb",
+                "udt_name": "jsonb",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "'{}'::jsonb",
+                "ordinal_position": 2
+              },
+              {
+                "name": "description",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 4
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 5
+              }
+            ],
+            "comment": "Глобальные настройки приложения (key-value JSON)",
+            "column_comments": {
+              "key": "Уникальный ключ настройки (например: ocr_server_settings)",
+              "value": "Значение настройки в формате JSON"
+            }
+          },
+          "job_settings": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "job_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "text_model",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "''::text",
+                "ordinal_position": 3
+              },
+              {
+                "name": "table_model",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "''::text",
+                "ordinal_position": 4
+              },
+              {
+                "name": "image_model",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "''::text",
+                "ordinal_position": 5
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 6
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 7
+              },
+              {
+                "name": "stamp_model",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "''::text",
+                "ordinal_position": 8
+              }
+            ],
+            "comment": "Настройки моделей для OCR задач",
+            "column_comments": {
+              "stamp_model": "Модель для распознавания штампов (IMAGE блоки с code=stamp)"
+            }
+          },
+          "qa_artifacts": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "conversation_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "artifact_type",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "r2_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "file_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 5
+              },
+              {
+                "name": "mime_type",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 6
+              },
+              {
+                "name": "file_size",
+                "type": "bigint",
+                "udt_name": "int8",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 7
+              },
+              {
+                "name": "metadata",
+                "type": "jsonb",
+                "udt_name": "jsonb",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "'{}'::jsonb",
+                "ordinal_position": 8
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 9
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "user_prompts": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "client_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "'default'::text",
+                "ordinal_position": 2
+              },
+              {
+                "name": "title",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "system_prompt",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "''::text",
+                "ordinal_position": 4
+              },
+              {
+                "name": "user_text",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "''::text",
+                "ordinal_position": 5
+              },
+              {
+                "name": "r2_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 6
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 7
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 8
+              }
+            ],
+            "comment": "User custom prompts for AI conversations",
+            "column_comments": {
+              "id": "Unique prompt identifier",
+              "title": "Prompt title",
+              "r2_key": "R2 storage key for full content",
+              "client_id": "Client identifier",
+              "user_text": "User prompt text",
+              "system_prompt": "System prompt text"
+            }
+          },
+          "section_types": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "udt_name": "int4",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "nextval('section_types_id_seq'::regclass)",
+                "ordinal_position": 1
+              },
+              {
+                "name": "code",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "sort_order",
+                "type": "integer",
+                "udt_name": "int4",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "0",
+                "ordinal_position": 4
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "qa_gemini_files": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "client_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "gemini_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "gemini_uri",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "display_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 5
+              },
+              {
+                "name": "mime_type",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 6
+              },
+              {
+                "name": "size_bytes",
+                "type": "bigint",
+                "udt_name": "int8",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 7
+              },
+              {
+                "name": "sha256",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 8
+              },
+              {
+                "name": "source_node_file_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 9
+              },
+              {
+                "name": "source_r2_key",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 10
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 11
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 12
+              },
+              {
+                "name": "expires_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 13
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "image_categories": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "code",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "description",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "system_prompt",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "''::text",
+                "ordinal_position": 5
+              },
+              {
+                "name": "user_prompt",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "''::text",
+                "ordinal_position": 6
+              },
+              {
+                "name": "is_default",
+                "type": "boolean",
+                "udt_name": "bool",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "false",
+                "ordinal_position": 7
+              },
+              {
+                "name": "sort_order",
+                "type": "integer",
+                "udt_name": "int4",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": "0",
+                "ordinal_position": 8
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 9
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 10
+              }
+            ],
+            "comment": "Категории изображений с промптами для OCR",
+            "column_comments": {
+              "code": "Уникальный код категории (slug)",
+              "name": "Отображаемое название категории",
+              "is_default": "Категория по умолчанию для всех новых IMAGE блоков",
+              "user_prompt": "User Input промпт для модели",
+              "system_prompt": "System/Role промпт для модели"
+            }
+          },
+          "qa_conversations": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "client_id",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "title",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "''::text",
+                "ordinal_position": 3
+              },
+              {
+                "name": "model_default",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "'gemini-3-flash-preview'::text",
+                "ordinal_position": 4
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 5
+              },
+              {
+                "name": "updated_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 6
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "qa_conversation_nodes": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "conversation_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "node_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "added_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 4
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "qa_conversation_gemini_files": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "conversation_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "gemini_file_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "added_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 4
+              }
+            ],
+            "comment": null,
+            "column_comments": null
+          },
+          "qa_conversation_context_files": {
+            "columns": [
+              {
+                "name": "id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "gen_random_uuid()",
+                "ordinal_position": 1
+              },
+              {
+                "name": "conversation_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 2
+              },
+              {
+                "name": "node_file_id",
+                "type": "uuid",
+                "udt_name": "uuid",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": null,
+                "ordinal_position": 3
+              },
+              {
+                "name": "gemini_name",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 4
+              },
+              {
+                "name": "gemini_uri",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 5
+              },
+              {
+                "name": "status",
+                "type": "text",
+                "udt_name": "text",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "'local'::text",
+                "ordinal_position": 6
+              },
+              {
+                "name": "uploaded_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "YES",
+                "default_value": null,
+                "ordinal_position": 7
+              },
+              {
+                "name": "created_at",
+                "type": "timestamp with time zone",
+                "udt_name": "timestamptz",
+                "max_length": null,
+                "is_nullable": "NO",
+                "default_value": "now()",
+                "ordinal_position": 8
+              }
+            ],
+            "comment": "Хранит файлы контекста диалога и их статус загрузки в Gemini Files API",
+            "column_comments": {
+              "status": "Статус: local, downloaded, uploaded",
+              "gemini_uri": "URI файла в Gemini Files API",
+              "gemini_name": "Имя файла в Gemini Files API (например: files/xyz123)"
+            }
+          }
+        },
+        "indexes": [
+          {
+            "table": "app_settings",
+            "definition": "CREATE UNIQUE INDEX app_settings_pkey ON public.app_settings USING btree (key)",
+            "index_name": "app_settings_pkey"
+          },
+          {
+            "table": "section_types",
+            "definition": "CREATE UNIQUE INDEX section_types_pkey ON public.section_types USING btree (id)",
+            "index_name": "section_types_pkey"
+          },
+          {
+            "table": "section_types",
+            "definition": "CREATE UNIQUE INDEX section_types_code_key ON public.section_types USING btree (code)",
+            "index_name": "section_types_code_key"
+          },
+          {
+            "table": "stage_types",
+            "definition": "CREATE UNIQUE INDEX stage_types_pkey ON public.stage_types USING btree (id)",
+            "index_name": "stage_types_pkey"
+          },
+          {
+            "table": "stage_types",
+            "definition": "CREATE UNIQUE INDEX stage_types_code_key ON public.stage_types USING btree (code)",
+            "index_name": "stage_types_code_key"
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "definition": "CREATE UNIQUE INDEX qa_conversation_context_files_pkey ON public.qa_conversation_context_files USING btree (id)",
+            "index_name": "qa_conversation_context_files_pkey"
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "definition": "CREATE UNIQUE INDEX qa_conversation_context_files_conversation_id_node_file_id_key ON public.qa_conversation_context_files USING btree (conversation_id, node_file_id)",
+            "index_name": "qa_conversation_context_files_conversation_id_node_file_id_key"
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "definition": "CREATE INDEX idx_qa_context_files_conversation ON public.qa_conversation_context_files USING btree (conversation_id)",
+            "index_name": "idx_qa_context_files_conversation"
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "definition": "CREATE INDEX idx_qa_context_files_node_file ON public.qa_conversation_context_files USING btree (node_file_id)",
+            "index_name": "idx_qa_context_files_node_file"
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "definition": "CREATE INDEX idx_qa_context_files_status ON public.qa_conversation_context_files USING btree (status)",
+            "index_name": "idx_qa_context_files_status"
+          },
+          {
+            "table": "qa_conversations",
+            "definition": "CREATE UNIQUE INDEX qa_conversations_pkey ON public.qa_conversations USING btree (id)",
+            "index_name": "qa_conversations_pkey"
+          },
+          {
+            "table": "qa_conversations",
+            "definition": "CREATE INDEX idx_qa_conversations_client_updated ON public.qa_conversations USING btree (client_id, updated_at DESC)",
+            "index_name": "idx_qa_conversations_client_updated"
+          },
+          {
+            "table": "qa_messages",
+            "definition": "CREATE UNIQUE INDEX qa_messages_pkey ON public.qa_messages USING btree (id)",
+            "index_name": "qa_messages_pkey"
+          },
+          {
+            "table": "qa_messages",
+            "definition": "CREATE INDEX idx_qa_messages_conversation_created ON public.qa_messages USING btree (conversation_id, created_at)",
+            "index_name": "idx_qa_messages_conversation_created"
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "definition": "CREATE UNIQUE INDEX qa_conversation_nodes_pkey ON public.qa_conversation_nodes USING btree (id)",
+            "index_name": "qa_conversation_nodes_pkey"
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "definition": "CREATE UNIQUE INDEX qa_conversation_nodes_conversation_id_node_id_key ON public.qa_conversation_nodes USING btree (conversation_id, node_id)",
+            "index_name": "qa_conversation_nodes_conversation_id_node_id_key"
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "definition": "CREATE INDEX idx_qa_conversation_nodes_conv ON public.qa_conversation_nodes USING btree (conversation_id)",
+            "index_name": "idx_qa_conversation_nodes_conv"
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "definition": "CREATE INDEX idx_qa_conversation_nodes_node ON public.qa_conversation_nodes USING btree (node_id)",
+            "index_name": "idx_qa_conversation_nodes_node"
+          },
+          {
+            "table": "qa_artifacts",
+            "definition": "CREATE UNIQUE INDEX qa_artifacts_pkey ON public.qa_artifacts USING btree (id)",
+            "index_name": "qa_artifacts_pkey"
+          },
+          {
+            "table": "qa_artifacts",
+            "definition": "CREATE INDEX idx_qa_artifacts_conversation_created ON public.qa_artifacts USING btree (conversation_id, created_at DESC)",
+            "index_name": "idx_qa_artifacts_conversation_created"
+          },
+          {
+            "table": "qa_gemini_files",
+            "definition": "CREATE UNIQUE INDEX qa_gemini_files_pkey ON public.qa_gemini_files USING btree (id)",
+            "index_name": "qa_gemini_files_pkey"
+          },
+          {
+            "table": "qa_gemini_files",
+            "definition": "CREATE UNIQUE INDEX qa_gemini_files_gemini_name_key ON public.qa_gemini_files USING btree (gemini_name)",
+            "index_name": "qa_gemini_files_gemini_name_key"
+          },
+          {
+            "table": "qa_gemini_files",
+            "definition": "CREATE INDEX idx_qa_gemini_files_client_expires ON public.qa_gemini_files USING btree (client_id, expires_at)",
+            "index_name": "idx_qa_gemini_files_client_expires"
+          },
+          {
+            "table": "user_prompts",
+            "definition": "CREATE UNIQUE INDEX user_prompts_pkey ON public.user_prompts USING btree (id)",
+            "index_name": "user_prompts_pkey"
+          },
+          {
+            "table": "user_prompts",
+            "definition": "CREATE INDEX idx_user_prompts_client_id ON public.user_prompts USING btree (client_id)",
+            "index_name": "idx_user_prompts_client_id"
+          },
+          {
+            "table": "image_categories",
+            "definition": "CREATE UNIQUE INDEX image_categories_pkey ON public.image_categories USING btree (id)",
+            "index_name": "image_categories_pkey"
+          },
+          {
+            "table": "image_categories",
+            "definition": "CREATE UNIQUE INDEX image_categories_code_key ON public.image_categories USING btree (code)",
+            "index_name": "image_categories_code_key"
+          },
+          {
+            "table": "image_categories",
+            "definition": "CREATE INDEX idx_image_categories_code ON public.image_categories USING btree (code)",
+            "index_name": "idx_image_categories_code"
+          },
+          {
+            "table": "image_categories",
+            "definition": "CREATE INDEX idx_image_categories_is_default ON public.image_categories USING btree (is_default) WHERE (is_default = true)",
+            "index_name": "idx_image_categories_is_default"
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "definition": "CREATE UNIQUE INDEX qa_conversation_gemini_files_pkey ON public.qa_conversation_gemini_files USING btree (id)",
+            "index_name": "qa_conversation_gemini_files_pkey"
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "definition": "CREATE UNIQUE INDEX qa_conversation_gemini_files_conversation_id_gemini_file_id_key ON public.qa_conversation_gemini_files USING btree (conversation_id, gemini_file_id)",
+            "index_name": "qa_conversation_gemini_files_conversation_id_gemini_file_id_key"
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "definition": "CREATE INDEX idx_qa_conv_gemini_files_conv ON public.qa_conversation_gemini_files USING btree (conversation_id)",
+            "index_name": "idx_qa_conv_gemini_files_conv"
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "definition": "CREATE INDEX idx_qa_conv_gemini_files_file ON public.qa_conversation_gemini_files USING btree (gemini_file_id)",
+            "index_name": "idx_qa_conv_gemini_files_file"
+          },
+          {
+            "table": "qa_settings",
+            "definition": "CREATE UNIQUE INDEX qa_settings_pkey ON public.qa_settings USING btree (id)",
+            "index_name": "qa_settings_pkey"
+          },
+          {
+            "table": "qa_settings",
+            "definition": "CREATE UNIQUE INDEX qa_settings_client_id_key ON public.qa_settings USING btree (client_id)",
+            "index_name": "qa_settings_client_id_key"
+          },
+          {
+            "table": "qa_settings",
+            "definition": "CREATE INDEX idx_qa_settings_client ON public.qa_settings USING btree (client_id)",
+            "index_name": "idx_qa_settings_client"
+          },
+          {
+            "table": "jobs",
+            "definition": "CREATE INDEX idx_jobs_client_id ON public.jobs USING btree (client_id)",
+            "index_name": "idx_jobs_client_id"
+          },
+          {
+            "table": "jobs",
+            "definition": "CREATE UNIQUE INDEX jobs_pkey ON public.jobs USING btree (id)",
+            "index_name": "jobs_pkey"
+          },
+          {
+            "table": "jobs",
+            "definition": "CREATE INDEX idx_jobs_document_id ON public.jobs USING btree (document_id)",
+            "index_name": "idx_jobs_document_id"
+          },
+          {
+            "table": "jobs",
+            "definition": "CREATE INDEX idx_jobs_status ON public.jobs USING btree (status)",
+            "index_name": "idx_jobs_status"
+          },
+          {
+            "table": "jobs",
+            "definition": "CREATE INDEX idx_jobs_node_id ON public.jobs USING btree (node_id)",
+            "index_name": "idx_jobs_node_id"
+          },
+          {
+            "table": "jobs",
+            "definition": "CREATE INDEX idx_jobs_created_at ON public.jobs USING btree (created_at DESC)",
+            "index_name": "idx_jobs_created_at"
+          },
+          {
+            "table": "node_files",
+            "definition": "CREATE INDEX idx_node_files_node_id ON public.node_files USING btree (node_id)",
+            "index_name": "idx_node_files_node_id"
+          },
+          {
+            "table": "node_files",
+            "definition": "CREATE INDEX idx_node_files_type ON public.node_files USING btree (file_type)",
+            "index_name": "idx_node_files_type"
+          },
+          {
+            "table": "node_files",
+            "definition": "CREATE INDEX idx_node_files_r2_key ON public.node_files USING btree (r2_key)",
+            "index_name": "idx_node_files_r2_key"
+          },
+          {
+            "table": "node_files",
+            "definition": "CREATE UNIQUE INDEX idx_node_files_unique_r2 ON public.node_files USING btree (node_id, r2_key)",
+            "index_name": "idx_node_files_unique_r2"
+          },
+          {
+            "table": "node_files",
+            "definition": "CREATE UNIQUE INDEX node_files_pkey ON public.node_files USING btree (id)",
+            "index_name": "node_files_pkey"
+          },
+          {
+            "table": "node_files",
+            "definition": "CREATE INDEX idx_node_files_node_type ON public.node_files USING btree (node_id, file_type)",
+            "index_name": "idx_node_files_node_type"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE UNIQUE INDEX tree_nodes_pkey ON public.tree_nodes USING btree (id)",
+            "index_name": "tree_nodes_pkey"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE INDEX idx_tree_nodes_parent_id ON public.tree_nodes USING btree (parent_id)",
+            "index_name": "idx_tree_nodes_parent_id"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE INDEX idx_tree_nodes_client_id ON public.tree_nodes USING btree (client_id)",
+            "index_name": "idx_tree_nodes_client_id"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE INDEX idx_tree_nodes_type ON public.tree_nodes USING btree (node_type)",
+            "index_name": "idx_tree_nodes_type"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE INDEX idx_tree_nodes_sort ON public.tree_nodes USING btree (parent_id, sort_order)",
+            "index_name": "idx_tree_nodes_sort"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE INDEX idx_tree_nodes_client_parent ON public.tree_nodes USING btree (client_id, parent_id)",
+            "index_name": "idx_tree_nodes_client_parent"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE INDEX idx_tree_nodes_pdf_status ON public.tree_nodes USING btree (pdf_status) WHERE (node_type = 'document'::text)",
+            "index_name": "idx_tree_nodes_pdf_status"
+          },
+          {
+            "table": "tree_nodes",
+            "definition": "CREATE INDEX idx_tree_nodes_is_locked ON public.tree_nodes USING btree (is_locked) WHERE ((node_type = 'document'::text) AND (is_locked = true))",
+            "index_name": "idx_tree_nodes_is_locked"
+          },
+          {
+            "table": "job_files",
+            "definition": "CREATE UNIQUE INDEX job_files_pkey ON public.job_files USING btree (id)",
+            "index_name": "job_files_pkey"
+          },
+          {
+            "table": "job_files",
+            "definition": "CREATE INDEX idx_job_files_job_id ON public.job_files USING btree (job_id)",
+            "index_name": "idx_job_files_job_id"
+          },
+          {
+            "table": "job_files",
+            "definition": "CREATE INDEX idx_job_files_type ON public.job_files USING btree (file_type)",
+            "index_name": "idx_job_files_type"
+          },
+          {
+            "table": "job_settings",
+            "definition": "CREATE UNIQUE INDEX job_settings_pkey ON public.job_settings USING btree (id)",
+            "index_name": "job_settings_pkey"
+          },
+          {
+            "table": "job_settings",
+            "definition": "CREATE UNIQUE INDEX job_settings_job_id_key ON public.job_settings USING btree (job_id)",
+            "index_name": "job_settings_job_id_key"
+          },
+          {
+            "table": "job_settings",
+            "definition": "CREATE INDEX idx_job_settings_job_id ON public.job_settings USING btree (job_id)",
+            "index_name": "idx_job_settings_job_id"
+          }
+        ],
+        "triggers": [
+          {
+            "event": "UPDATE",
+            "table": "app_settings",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_app_settings_timestamp()",
+            "orientation": "ROW",
+            "trigger_name": "app_settings_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "qa_settings",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_updated_at_column()",
+            "orientation": "ROW",
+            "trigger_name": "qa_settings_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "image_categories",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_image_categories_updated_at()",
+            "orientation": "ROW",
+            "trigger_name": "trigger_image_categories_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "tree_nodes",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_updated_at_column()",
+            "orientation": "ROW",
+            "trigger_name": "update_tree_nodes_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "node_files",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_updated_at_column()",
+            "orientation": "ROW",
+            "trigger_name": "update_node_files_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "jobs",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_updated_at_column()",
+            "orientation": "ROW",
+            "trigger_name": "update_jobs_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "job_settings",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_updated_at_column()",
+            "orientation": "ROW",
+            "trigger_name": "update_job_settings_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "qa_conversations",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_updated_at_column()",
+            "orientation": "ROW",
+            "trigger_name": "qa_conversations_updated_at"
+          },
+          {
+            "event": "UPDATE",
+            "table": "qa_gemini_files",
+            "timing": "BEFORE",
+            "statement": "EXECUTE FUNCTION update_updated_at_column()",
+            "orientation": "ROW",
+            "trigger_name": "qa_gemini_files_updated_at"
+          }
+        ],
+        "functions": [
+          {
+            "name": "update_app_settings_timestamp",
+            "comment": null,
+            "language": "plpgsql",
+            "arguments": "",
+            "definition": "CREATE OR REPLACE FUNCTION public.update_app_settings_timestamp()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n    NEW.updated_at = now();\r\n    RETURN NEW;\r\nEND;\r\n$function$\n",
+            "return_type": "trigger"
+          },
+          {
+            "name": "update_image_categories_updated_at",
+            "comment": null,
+            "language": "plpgsql",
+            "arguments": "",
+            "definition": "CREATE OR REPLACE FUNCTION public.update_image_categories_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n    NEW.updated_at = now();\r\n    RETURN NEW;\r\nEND;\r\n$function$\n",
+            "return_type": "trigger"
+          },
+          {
+            "name": "qa_get_descendants",
+            "comment": null,
+            "language": "plpgsql",
+            "arguments": "p_client_id text, p_root_ids uuid[], p_node_types text[] DEFAULT NULL::text[]",
+            "definition": "CREATE OR REPLACE FUNCTION public.qa_get_descendants(p_client_id text, p_root_ids uuid[], p_node_types text[] DEFAULT NULL::text[])\n RETURNS TABLE(id uuid, parent_id uuid, node_type text, name text, code text, version integer, status text, attributes jsonb, sort_order integer, depth integer)\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nBEGIN\r\n    RETURN QUERY\r\n    WITH RECURSIVE descendants AS (\r\n        -- Base: root nodes\r\n        SELECT \r\n            t.id,\r\n            t.parent_id,\r\n            t.node_type,\r\n            t.name,\r\n            t.code,\r\n            t.version,\r\n            t.status,\r\n            t.attributes,\r\n            t.sort_order,\r\n            0 AS depth\r\n        FROM public.tree_nodes t\r\n        WHERE t.client_id = p_client_id\r\n          AND t.id = ANY(p_root_ids)\r\n        \r\n        UNION ALL\r\n        \r\n        -- Recursive: children\r\n        SELECT \r\n            t.id,\r\n            t.parent_id,\r\n            t.node_type,\r\n            t.name,\r\n            t.code,\r\n            t.version,\r\n            t.status,\r\n            t.attributes,\r\n            t.sort_order,\r\n            d.depth + 1\r\n        FROM public.tree_nodes t\r\n        INNER JOIN descendants d ON t.parent_id = d.id\r\n        WHERE t.client_id = p_client_id\r\n    )\r\n    SELECT \r\n        d.id,\r\n        d.parent_id,\r\n        d.node_type,\r\n        d.name,\r\n        d.code,\r\n        d.version,\r\n        d.status,\r\n        d.attributes,\r\n        d.sort_order,\r\n        d.depth\r\n    FROM descendants d\r\n    WHERE (p_node_types IS NULL OR d.node_type = ANY(p_node_types))\r\n    ORDER BY d.depth, d.sort_order, d.name;\r\nEND;\r\n$function$\n",
+            "return_type": "TABLE(id uuid, parent_id uuid, node_type text, name text, code text, version integer, status text, attributes jsonb, sort_order integer, depth integer)"
+          },
+          {
+            "name": "qa_list_conversations_with_stats",
+            "comment": null,
+            "language": "sql",
+            "arguments": "p_client_id text DEFAULT 'default'::text, p_limit integer DEFAULT 50",
+            "definition": "CREATE OR REPLACE FUNCTION public.qa_list_conversations_with_stats(p_client_id text DEFAULT 'default'::text, p_limit integer DEFAULT 50)\n RETURNS TABLE(id uuid, client_id text, title text, model_default text, created_at timestamp with time zone, updated_at timestamp with time zone, message_count bigint, file_count bigint, last_message_at timestamp with time zone)\n LANGUAGE sql\n STABLE\nAS $function$\r\n    SELECT \r\n        c.id,\r\n        c.client_id,\r\n        c.title,\r\n        c.model_default,\r\n        c.created_at,\r\n        c.updated_at,\r\n        COALESCE(COUNT(DISTINCT m.id), 0) AS message_count,\r\n        COALESCE(COUNT(DISTINCT cgf.id), 0) AS file_count,\r\n        MAX(m.created_at) AS last_message_at\r\n    FROM qa_conversations c\r\n    LEFT JOIN qa_messages m ON m.conversation_id = c.id\r\n    LEFT JOIN qa_conversation_gemini_files cgf ON cgf.conversation_id = c.id\r\n    WHERE c.client_id = p_client_id\r\n    GROUP BY c.id, c.client_id, c.title, c.model_default, c.created_at, c.updated_at\r\n    ORDER BY c.updated_at DESC\r\n    LIMIT p_limit;\r\n$function$\n",
+            "return_type": "TABLE(id uuid, client_id text, title text, model_default text, created_at timestamp with time zone, updated_at timestamp with time zone, message_count bigint, file_count bigint, last_message_at timestamp with time zone)"
+          },
+          {
+            "name": "update_pdf_status",
+            "comment": null,
+            "language": "plpgsql",
+            "arguments": "p_node_id uuid, p_status text, p_message text DEFAULT NULL::text",
+            "definition": "CREATE OR REPLACE FUNCTION public.update_pdf_status(p_node_id uuid, p_status text, p_message text DEFAULT NULL::text)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n    UPDATE tree_nodes\r\n    SET \r\n        pdf_status = p_status,\r\n        pdf_status_message = p_message,\r\n        pdf_status_updated_at = NOW(),\r\n        updated_at = NOW()\r\n    WHERE id = p_node_id AND node_type = 'document';\r\nEND;\r\n$function$\n",
+            "return_type": "void"
+          },
+          {
+            "name": "recalculate_all_pdf_statuses",
+            "comment": "Пересчитывает статусы всех PDF документов на основе данных node_files",
+            "language": "plpgsql",
+            "arguments": "",
+            "definition": "CREATE OR REPLACE FUNCTION public.recalculate_all_pdf_statuses()\n RETURNS TABLE(node_id uuid, old_status text, new_status text, status_message text)\n LANGUAGE plpgsql\nAS $function$\r\nDECLARE\r\n    doc RECORD;\r\n    v_status TEXT;\r\n    v_message TEXT;\r\n    v_has_ann_r2 BOOLEAN;\r\n    v_has_ocr_r2 BOOLEAN;\r\n    v_has_res_r2 BOOLEAN;\r\n    v_has_ann_db BOOLEAN;\r\n    v_has_ocr_db BOOLEAN;\r\n    v_has_res_db BOOLEAN;\r\n    v_r2_key TEXT;\r\n    v_ann_key TEXT;\r\n    v_ocr_key TEXT;\r\n    v_res_key TEXT;\r\nBEGIN\r\n    -- Обходим все документы\r\n    FOR doc IN \r\n        SELECT id, attributes->>'r2_key' as r2_key, pdf_status\r\n        FROM tree_nodes \r\n        WHERE node_type = 'document'\r\n    LOOP\r\n        v_r2_key := doc.r2_key;\r\n        \r\n        IF v_r2_key IS NULL OR v_r2_key = '' THEN\r\n            v_status := 'unknown';\r\n            v_message := 'Нет R2 ключа';\r\n        ELSE\r\n            -- Формируем ключи для связанных файлов\r\n            v_ann_key := regexp_replace(v_r2_key, '\\.pdf$', '_annotation.json', 'i');\r\n            v_ocr_key := regexp_replace(v_r2_key, '\\.pdf$', '_ocr.html', 'i');\r\n            v_res_key := regexp_replace(v_r2_key, '\\.pdf$', '_result.json', 'i');\r\n            \r\n            -- Проверяем наличие в node_files\r\n            SELECT \r\n                bool_or(file_type = 'annotation') AS has_ann,\r\n                bool_or(file_type = 'ocr_html') AS has_ocr,\r\n                bool_or(file_type = 'result_json') AS has_res\r\n            INTO v_has_ann_db, v_has_ocr_db, v_has_res_db\r\n            FROM node_files\r\n            WHERE node_id = doc.id;\r\n            \r\n            -- Определяем статус на основе наличия файлов в БД\r\n            IF v_has_ann_db AND v_has_ocr_db AND v_has_res_db THEN\r\n                v_status := 'complete';\r\n                v_message := 'Все файлы на месте';\r\n            ELSIF NOT v_has_ann_db THEN\r\n                v_status := 'missing_blocks';\r\n                v_message := 'Отсутствует annotation.json';\r\n            ELSE\r\n                v_status := 'missing_files';\r\n                v_message := '';\r\n                IF NOT v_has_ocr_db THEN\r\n                    v_message := v_message || 'ocr.html не в Supabase; ';\r\n                END IF;\r\n                IF NOT v_has_res_db THEN\r\n                    v_message := v_message || 'result.json не в Supabase; ';\r\n                END IF;\r\n            END IF;\r\n        END IF;\r\n        \r\n        -- Обновляем статус\r\n        UPDATE tree_nodes\r\n        SET \r\n            pdf_status = v_status,\r\n            pdf_status_message = v_message,\r\n            pdf_status_updated_at = NOW()\r\n        WHERE id = doc.id;\r\n        \r\n        -- Возвращаем результат\r\n        node_id := doc.id;\r\n        old_status := doc.pdf_status;\r\n        new_status := v_status;\r\n        status_message := v_message;\r\n        RETURN NEXT;\r\n    END LOOP;\r\nEND;\r\n$function$\n",
+            "return_type": "TABLE(node_id uuid, old_status text, new_status text, status_message text)"
+          },
+          {
+            "name": "update_updated_at_column",
+            "comment": null,
+            "language": "plpgsql",
+            "arguments": "",
+            "definition": "CREATE OR REPLACE FUNCTION public.update_updated_at_column()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n    NEW.updated_at = NOW();\r\n    RETURN NEW;\r\nEND;\r\n$function$\n",
+            "return_type": "trigger"
+          }
+        ],
+        "sequences": [
+          {
+            "name": "section_types_id_seq",
+            "cache": 1,
+            "cycle": false,
+            "data_type": "integer",
+            "increment": 1,
+            "max_value": 2147483647,
+            "min_value": 1,
+            "start_value": 1
+          },
+          {
+            "name": "stage_types_id_seq",
+            "cache": 1,
+            "cycle": false,
+            "data_type": "integer",
+            "increment": 1,
+            "max_value": 2147483647,
+            "min_value": 1,
+            "start_value": 1
+          }
+        ],
+        "schema_name": "public",
+        "foreign_keys": [
+          {
+            "table": "tree_nodes",
+            "columns": [
+              "parent_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "tree_nodes",
+            "constraint_name": "tree_nodes_parent_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_artifacts",
+            "columns": [
+              "conversation_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "qa_conversations",
+            "constraint_name": "qa_artifacts_conversation_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_gemini_files",
+            "columns": [
+              "source_node_file_id"
+            ],
+            "on_delete": "SET NULL",
+            "on_update": "NO ACTION",
+            "foreign_table": "node_files",
+            "constraint_name": "qa_gemini_files_source_node_file_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "columns": [
+              "conversation_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "qa_conversations",
+            "constraint_name": "qa_conversation_gemini_files_conversation_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "columns": [
+              "gemini_file_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "qa_gemini_files",
+            "constraint_name": "qa_conversation_gemini_files_gemini_file_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "node_files",
+            "columns": [
+              "node_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "tree_nodes",
+            "constraint_name": "node_files_node_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "jobs",
+            "columns": [
+              "node_id"
+            ],
+            "on_delete": "SET NULL",
+            "on_update": "NO ACTION",
+            "foreign_table": "tree_nodes",
+            "constraint_name": "jobs_node_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "job_files",
+            "columns": [
+              "job_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "jobs",
+            "constraint_name": "job_files_job_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "job_settings",
+            "columns": [
+              "job_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "jobs",
+            "constraint_name": "job_settings_job_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_messages",
+            "columns": [
+              "conversation_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "qa_conversations",
+            "constraint_name": "qa_messages_conversation_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "columns": [
+              "conversation_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "qa_conversations",
+            "constraint_name": "qa_conversation_nodes_conversation_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "columns": [
+              "node_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "tree_nodes",
+            "constraint_name": "qa_conversation_nodes_node_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "columns": [
+              "conversation_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "qa_conversations",
+            "constraint_name": "qa_conversation_context_files_conversation_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "columns": [
+              "node_file_id"
+            ],
+            "on_delete": "CASCADE",
+            "on_update": "NO ACTION",
+            "foreign_table": "node_files",
+            "constraint_name": "qa_conversation_context_files_node_file_id_fkey",
+            "foreign_columns": [
+              "id"
+            ]
+          }
+        ],
+        "primary_keys": [
+          {
+            "table": "tree_nodes",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "tree_nodes_pkey"
+          },
+          {
+            "table": "qa_artifacts",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_artifacts_pkey"
+          },
+          {
+            "table": "qa_gemini_files",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_gemini_files_pkey"
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_conversation_gemini_files_pkey"
+          },
+          {
+            "table": "qa_settings",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_settings_pkey"
+          },
+          {
+            "table": "node_files",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "node_files_pkey"
+          },
+          {
+            "table": "jobs",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "jobs_pkey"
+          },
+          {
+            "table": "job_files",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "job_files_pkey"
+          },
+          {
+            "table": "job_settings",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "job_settings_pkey"
+          },
+          {
+            "table": "section_types",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "section_types_pkey"
+          },
+          {
+            "table": "stage_types",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "stage_types_pkey"
+          },
+          {
+            "table": "app_settings",
+            "columns": [
+              "key"
+            ],
+            "constraint_name": "app_settings_pkey"
+          },
+          {
+            "table": "image_categories",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "image_categories_pkey"
+          },
+          {
+            "table": "qa_conversations",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_conversations_pkey"
+          },
+          {
+            "table": "qa_messages",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_messages_pkey"
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_conversation_nodes_pkey"
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "qa_conversation_context_files_pkey"
+          },
+          {
+            "table": "user_prompts",
+            "columns": [
+              "id"
+            ],
+            "constraint_name": "user_prompts_pkey"
+          }
+        ],
+        "unique_constraints": [
+          {
+            "table": "qa_gemini_files",
+            "columns": [
+              "gemini_name"
+            ],
+            "constraint_name": "qa_gemini_files_gemini_name_key"
+          },
+          {
+            "table": "qa_conversation_gemini_files",
+            "columns": [
+              "conversation_id",
+              "gemini_file_id"
+            ],
+            "constraint_name": "qa_conversation_gemini_files_conversation_id_gemini_file_id_key"
+          },
+          {
+            "table": "qa_settings",
+            "columns": [
+              "client_id"
+            ],
+            "constraint_name": "qa_settings_client_id_key"
+          },
+          {
+            "table": "job_settings",
+            "columns": [
+              "job_id"
+            ],
+            "constraint_name": "job_settings_job_id_key"
+          },
+          {
+            "table": "section_types",
+            "columns": [
+              "code"
+            ],
+            "constraint_name": "section_types_code_key"
+          },
+          {
+            "table": "stage_types",
+            "columns": [
+              "code"
+            ],
+            "constraint_name": "stage_types_code_key"
+          },
+          {
+            "table": "image_categories",
+            "columns": [
+              "code"
+            ],
+            "constraint_name": "image_categories_code_key"
+          },
+          {
+            "table": "qa_conversation_nodes",
+            "columns": [
+              "conversation_id",
+              "node_id"
+            ],
+            "constraint_name": "qa_conversation_nodes_conversation_id_node_id_key"
+          },
+          {
+            "table": "qa_conversation_context_files",
+            "columns": [
+              "conversation_id",
+              "node_file_id"
+            ],
+            "constraint_name": "qa_conversation_context_files_conversation_id_node_file_id_key"
+          }
+        ]
+      }
+    }
+  ]

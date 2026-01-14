@@ -1,0 +1,543 @@
+[
+  {
+    "schema": {
+      "views": {
+        "view_folder_contents": " SELECT f.id AS folder_id,\n    f.name AS folder_name,\n    sf.id AS file_id,\n    sf.filename,\n    sf.source_type,\n    sf.storage_path,\n    sf.external_url,\n    sf.created_at\n   FROM ((folders f\n     JOIN folder_items fi ON ((f.id = fi.folder_id)))\n     JOIN storage_files sf ON ((fi.file_id = sf.id)));"
+      },
+      "tables": {
+        "chats": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "title",
+              "def": null,
+              "null": "NO",
+              "type": "character varying"
+            },
+            {
+              "col": "description",
+              "def": null,
+              "null": "YES",
+              "type": "text"
+            },
+            {
+              "col": "user_id",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "is_archived",
+              "def": "false",
+              "null": "YES",
+              "type": "boolean"
+            },
+            {
+              "col": "document_file_id",
+              "def": null,
+              "null": "YES",
+              "type": "uuid"
+            },
+            {
+              "col": "document_path",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "metadata",
+              "def": "'{}'::jsonb",
+              "null": "YES",
+              "type": "jsonb"
+            },
+            {
+              "col": "created_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            },
+            {
+              "col": "updated_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": [
+            {
+              "from": "document_file_id",
+              "to_col": "id",
+              "to_table": "storage_files"
+            }
+          ]
+        },
+        "folders": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "user_id",
+              "def": null,
+              "null": "NO",
+              "type": "character varying"
+            },
+            {
+              "col": "name",
+              "def": null,
+              "null": "NO",
+              "type": "character varying"
+            },
+            {
+              "col": "parent_id",
+              "def": null,
+              "null": "YES",
+              "type": "uuid"
+            },
+            {
+              "col": "created_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            },
+            {
+              "col": "updated_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            },
+            {
+              "col": "slug",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            }
+          ],
+          "foreign_keys": [
+            {
+              "from": "parent_id",
+              "to_col": "id",
+              "to_table": "folders"
+            }
+          ]
+        },
+        "settings": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "user_id",
+              "def": null,
+              "null": "NO",
+              "type": "character varying"
+            },
+            {
+              "col": "page_settings",
+              "def": "'{}'::jsonb",
+              "null": "NO",
+              "type": "jsonb"
+            },
+            {
+              "col": "created_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            },
+            {
+              "col": "updated_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": []
+        },
+        "chat_images": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "chat_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "message_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "file_id",
+              "def": null,
+              "null": "YES",
+              "type": "uuid"
+            },
+            {
+              "col": "image_type",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "description",
+              "def": null,
+              "null": "YES",
+              "type": "text"
+            },
+            {
+              "col": "width",
+              "def": null,
+              "null": "YES",
+              "type": "integer"
+            },
+            {
+              "col": "height",
+              "def": null,
+              "null": "YES",
+              "type": "integer"
+            },
+            {
+              "col": "uploaded_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": [
+            {
+              "from": "message_id",
+              "to_col": "id",
+              "to_table": "chat_messages"
+            },
+            {
+              "from": "chat_id",
+              "to_col": "id",
+              "to_table": "chats"
+            },
+            {
+              "from": "file_id",
+              "to_col": "id",
+              "to_table": "storage_files"
+            }
+          ]
+        },
+        "folder_items": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "folder_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "file_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "added_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": [
+            {
+              "from": "file_id",
+              "to_col": "id",
+              "to_table": "storage_files"
+            },
+            {
+              "from": "folder_id",
+              "to_col": "id",
+              "to_table": "folders"
+            }
+          ]
+        },
+        "user_prompts": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "nextval('user_prompts_id_seq'::regclass)",
+              "null": "NO",
+              "type": "bigint"
+            },
+            {
+              "col": "user_id",
+              "def": "'default_user'::text",
+              "null": "NO",
+              "type": "text"
+            },
+            {
+              "col": "name",
+              "def": null,
+              "null": "NO",
+              "type": "text"
+            },
+            {
+              "col": "content",
+              "def": null,
+              "null": "NO",
+              "type": "text"
+            },
+            {
+              "col": "created_at",
+              "def": "now()",
+              "null": "YES",
+              "type": "timestamp with time zone"
+            },
+            {
+              "col": "updated_at",
+              "def": "now()",
+              "null": "YES",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": []
+        },
+        "chat_messages": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "chat_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "role",
+              "def": null,
+              "null": "NO",
+              "type": "character varying"
+            },
+            {
+              "col": "content",
+              "def": null,
+              "null": "NO",
+              "type": "text"
+            },
+            {
+              "col": "message_type",
+              "def": "'text'::character varying",
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "created_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": [
+            {
+              "from": "chat_id",
+              "to_col": "id",
+              "to_table": "chats"
+            }
+          ]
+        },
+        "storage_files": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "user_id",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "source_type",
+              "def": null,
+              "null": "NO",
+              "type": "character varying"
+            },
+            {
+              "col": "storage_path",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "external_url",
+              "def": null,
+              "null": "YES",
+              "type": "text"
+            },
+            {
+              "col": "filename",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "mime_type",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "size_bytes",
+              "def": null,
+              "null": "YES",
+              "type": "bigint"
+            },
+            {
+              "col": "created_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": []
+        },
+        "search_results": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "chat_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "message_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "block_id",
+              "def": null,
+              "null": "YES",
+              "type": "character varying"
+            },
+            {
+              "col": "page_number",
+              "def": null,
+              "null": "YES",
+              "type": "integer"
+            },
+            {
+              "col": "block_text",
+              "def": null,
+              "null": "YES",
+              "type": "text"
+            },
+            {
+              "col": "coords_norm",
+              "def": null,
+              "null": "YES",
+              "type": "jsonb"
+            },
+            {
+              "col": "coords_px",
+              "def": null,
+              "null": "YES",
+              "type": "jsonb"
+            },
+            {
+              "col": "created_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": [
+            {
+              "from": "chat_id",
+              "to_col": "id",
+              "to_table": "chats"
+            },
+            {
+              "from": "message_id",
+              "to_col": "id",
+              "to_table": "chat_messages"
+            }
+          ]
+        },
+        "message_attachments": {
+          "columns": [
+            {
+              "col": "id",
+              "def": "gen_random_uuid()",
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "message_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "file_id",
+              "def": null,
+              "null": "NO",
+              "type": "uuid"
+            },
+            {
+              "col": "created_at",
+              "def": "timezone('utc'::text, now())",
+              "null": "NO",
+              "type": "timestamp with time zone"
+            }
+          ],
+          "foreign_keys": [
+            {
+              "from": "message_id",
+              "to_col": "id",
+              "to_table": "chat_messages"
+            },
+            {
+              "from": "file_id",
+              "to_col": "id",
+              "to_table": "storage_files"
+            }
+          ]
+        }
+      },
+      "updated_at": "2025-12-24T14:22:22.126875+00:00"
+    }
+  }
+]
