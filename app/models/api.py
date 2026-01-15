@@ -39,7 +39,7 @@ class UserSettings(BaseModel):
         default="simple",
         description="Режим модели: simple (flash) или complex (flash+pro)"
     )
-    selected_role_prompt_id: Optional[UUID] = Field(
+    selected_role_prompt_id: Optional[int] = Field(
         default=None,
         description="ID выбранной роли из prompts_user"
     )
@@ -48,7 +48,7 @@ class UserSettings(BaseModel):
 class UserSettingsUpdate(BaseModel):
     """Запрос обновления настроек пользователя."""
     model_profile: Optional[Literal["simple", "complex"]] = None
-    selected_role_prompt_id: Optional[UUID] = None
+    selected_role_prompt_id: Optional[int] = None
 
 
 class UserMeResponse(BaseModel):
@@ -86,7 +86,7 @@ class PromptSystem(PromptBase):
 
 class PromptUserRole(PromptBase):
     """Пользовательский промпт-роль."""
-    id: UUID
+    id: int  # bigint в БД
     version: int = Field(default=1)
     created_at: datetime
     updated_at: datetime

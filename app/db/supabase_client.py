@@ -31,9 +31,11 @@ class SupabaseClient:
     
     def __init__(self):
         """Инициализация клиента Supabase."""
+        # Используем service_key если есть, иначе anon_key
+        key = settings.supabase_service_key or settings.supabase_anon_key
         self.client: SupabaseClientSDK = create_client(
             settings.supabase_url,
-            settings.supabase_service_key
+            key
         )
     
     # ===== USER METHODS =====

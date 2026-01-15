@@ -9,8 +9,8 @@ passlib[bcrypt]==1.7.4
 python-dotenv==1.0.1
 
 # Database
-supabase==2.11.2
-postgrest==0.18.1
+supabase==2.27.2
+postgrest==2.27.2
 
 # Storage
 boto3==1.35.95
@@ -23,7 +23,7 @@ Pillow==11.1.0
 pymupdf==1.25.2
 
 # Data Processing
-pydantic==2.10.5
+pydantic==2.11.7
 pydantic-settings==2.7.1
 
 # Utils

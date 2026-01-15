@@ -33,7 +33,7 @@ class Settings(BaseModel):
     """Настройки пользователя из БД."""
     user_id: UUID
     model_profile: Literal["simple", "complex"] = Field(default="simple")
-    selected_role_prompt_id: Optional[UUID] = None
+    selected_role_prompt_id: Optional[int] = None  # bigint в БД
     page_settings: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime

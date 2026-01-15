@@ -19,9 +19,11 @@ class SupabaseProjectsClient:
     
     def __init__(self):
         """Инициализация клиента Supabase Projects."""
+        # Используем service_key если есть, иначе anon_key
+        key = settings.supabase_projects_service_key or settings.supabase_projects_anon_key
         self.client: SupabaseClientSDK = create_client(
             settings.supabase_projects_url,
-            settings.supabase_projects_service_key
+            key
         )
     
     async def get_tree_nodes(
