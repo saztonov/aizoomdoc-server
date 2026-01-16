@@ -116,12 +116,22 @@ class LLMService:
             
             # Добавляем файлы из Google File API
             if google_file_uris:
-                for uri in google_file_uris:
-                    # Используем файловую ссылку через genai_types.FileData
-                    user_parts.append(genai_types.Part.from_uri(
-                        file_uri=uri,
-                        mime_type=self._guess_mime_type(uri)
-                    ))
+                for uri_item in google_file_uris:
+                    # uri_item может быть строкой или dict с uri и mime_type
+                    if isinstance(uri_item, dict):
+                        uri = uri_item.get("uri", "")
+                        mime = uri_item.get("mime_type", "text/plain")
+                    else:
+                        uri = uri_item
+                        # По умолчанию text/plain для текстовых файлов
+                        mime = "text/plain"
+                    
+                    if uri:
+                        logger.info(f"Adding file to LLM: uri={uri}, mime_type={mime}")
+                        user_parts.append(genai_types.Part.from_uri(
+                            file_uri=uri,
+                            mime_type=mime
+                        ))
             
             user_parts.append(genai_types.Part(text=user_message))
             contents.append(

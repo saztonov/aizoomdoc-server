@@ -4,6 +4,7 @@
 
 import logging
 import re
+import os
 from typing import Optional, AsyncGenerator, Dict, Any, List
 from pathlib import Path
 from io import BytesIO
@@ -23,6 +24,18 @@ from app.services.search_service import SearchService
 from app.services.image_service import ImageService
 
 logger = logging.getLogger(__name__)
+
+# Путь к локальным промптам
+PROMPTS_DIR = Path(__file__).parent.parent.parent / "data" / "promts"
+
+
+def load_prompt(name: str) -> str:
+    """Загрузить промпт из файла."""
+    prompt_file = PROMPTS_DIR / f"{name}.txt"
+    if prompt_file.exists():
+        return prompt_file.read_text(encoding="utf-8")
+    logger.warning(f"Prompt file not found: {prompt_file}")
+    return ""
 
 
 class AgentService:
@@ -164,47 +177,68 @@ class AgentService:
         client_id: Optional[str] = None,
         google_file_uris: Optional[List[str]] = None
     ) -> AsyncGenerator[StreamEvent, None]:
-        """Обработка в simple (flash) режиме."""
+        """Обработка в simple (flash) режиме с итеративной обработкой tool calls."""
         
-        # Загружаем системные промпты
-        system_prompt = await self.llm_service.load_system_prompts(self.supabase)
+        # Загружаем системный промпт из файла
+        system_prompt = load_prompt("llm_system_prompt")
+        if not system_prompt:
+            system_prompt = await self.llm_service.load_system_prompts(self.supabase)
         
-        # Формируем полный промпт с контекстом
+        # Формируем начальный промпт с контекстом
         full_message = f"{context_text}\n\nЗАПРОС ПОЛЬЗОВАТЕЛЯ: {user_message}"
         
-        # Стримим ответ
-        accumulated_response = ""
+        # Файлы для LLM (начальные + полученные через tool calls)
+        current_files = list(google_file_uris) if google_file_uris else []
         
-        async for token in self.llm_service.generate_simple(
-            user_message=full_message,
-            system_prompt=system_prompt,
-            google_file_uris=google_file_uris
-        ):
-            accumulated_response += token
+        # Максимальное количество итераций tool calls
+        max_iterations = 5
+        iteration = 0
+        final_response = ""
+        
+        while iteration < max_iterations:
+            iteration += 1
+            logger.info(f"LLM iteration {iteration}, files: {len(current_files)}")
             
-            yield StreamEvent(
-                event="llm_token",
-                data=LLMTokenEvent(
-                    token=token,
-                    accumulated=accumulated_response
-                ).dict(),
-                timestamp=datetime.utcnow()
-            )
-        
-        # Сохраняем ответ в БД
-        await self.supabase.add_message(
-            chat_id=chat_id,
-            role="assistant",
-            content=accumulated_response
-        )
-
-        # Парсим tool calls (request_images / zoom / request_documents)
-        tool_calls = await self.llm_service.parse_tool_calls(accumulated_response)
-        for call in tool_calls:
-            tool = call.get("tool")
-            reason = call.get("reason", "")
-            params = {k: v for k, v in call.items() if k not in ("tool", "reason")}
-            if tool:
+            # Стримим ответ
+            accumulated_response = ""
+            
+            async for token in self.llm_service.generate_simple(
+                user_message=full_message,
+                system_prompt=system_prompt,
+                google_file_uris=current_files if current_files else None
+            ):
+                accumulated_response += token
+                
+                yield StreamEvent(
+                    event="llm_token",
+                    data=LLMTokenEvent(
+                        token=token,
+                        accumulated=accumulated_response
+                    ).dict(),
+                    timestamp=datetime.utcnow()
+                )
+            
+            final_response = accumulated_response
+            
+            # Парсим tool calls
+            tool_calls = await self.llm_service.parse_tool_calls(accumulated_response)
+            
+            if not tool_calls:
+                # Нет tool calls - финальный ответ
+                logger.info("No tool calls, final response")
+                break
+            
+            # Обрабатываем tool calls и собираем новые файлы
+            new_files = []
+            
+            for call in tool_calls:
+                tool = call.get("tool")
+                reason = call.get("reason", "")
+                params = {k: v for k, v in call.items() if k not in ("tool", "reason")}
+                
+                if not tool:
+                    continue
+                
                 yield StreamEvent(
                     event="tool_call",
                     data=ToolCallEvent(
@@ -214,38 +248,198 @@ class AgentService:
                     ).dict(),
                     timestamp=datetime.utcnow()
                 )
-                # Обработка request_images
+                
+                yield StreamEvent(
+                    event="phase_started",
+                    data={"phase": "tool_execution", "description": f"Выполняю {tool}..."},
+                    timestamp=datetime.utcnow()
+                )
+                
                 if tool == "request_images":
                     image_ids = params.get("image_ids") or []
-                    await self._handle_request_images(
-                        chat_id=chat_id,
-                        image_ids=image_ids,
-                        document_ids=document_ids
-                    )
+                    files = await self._fetch_and_upload_images(image_ids, document_ids)
+                    new_files.extend(files)
+                    
                 elif tool == "zoom":
-                    await self._handle_zoom(
-                        chat_id=chat_id,
-                        image_id=params.get("image_id"),
-                        document_ids=document_ids,
-                        coords_norm=params.get("coords_norm"),
-                        reason=reason
-                    )
+                    image_id = params.get("image_id")
+                    coords = params.get("coords_norm") or params.get("coords_px")
+                    files = await self._fetch_and_upload_zoom(image_id, document_ids, coords)
+                    new_files.extend(files)
+                    
                 elif tool == "request_documents":
-                    # Запрос дополнительных документов по именам
-                    doc_names = params.get("document_names") or params.get("document_ids") or []
-                    async for ev in self._handle_request_documents(
-                        chat_id=chat_id,
-                        document_names=doc_names,
-                        user_message=user_message,
-                        original_context=context_text
-                    ):
-                        yield ev
+                    doc_names = params.get("documents") or params.get("document_names") or []
+                    # TODO: Загрузить дополнительные документы
+                    logger.info(f"Request documents: {doc_names}")
+            
+            if not new_files:
+                # Tool calls были, но новых файлов нет - выходим
+                logger.info("Tool calls processed but no new files")
+                break
+            
+            # Добавляем новые файлы к текущим
+            current_files.extend(new_files)
+            
+            # Формируем сообщение для следующей итерации
+            full_message = f"Предыдущий ответ: {accumulated_response}\n\nПолучены запрошенные изображения ({len(new_files)} шт). Продолжи анализ.\n\nЗАПРОС ПОЛЬЗОВАТЕЛЯ: {user_message}"
+        
+        # Сохраняем финальный ответ в БД
+        await self.supabase.add_message(
+            chat_id=chat_id,
+            role="assistant",
+            content=final_response
+        )
         
         yield StreamEvent(
             event="llm_final",
-            data={"content": accumulated_response},
+            data={"content": final_response},
             timestamp=datetime.utcnow()
         )
+    
+    async def _fetch_and_upload_images(
+        self,
+        image_ids: List[str],
+        document_ids: Optional[List[UUID]]
+    ) -> List[dict]:
+        """Найти изображения по ID и загрузить в Google File API."""
+        uploaded_files = []
+        
+        for image_id in image_ids:
+            try:
+                crop = await self._find_crop_by_image_id(image_id, document_ids)
+                if not crop:
+                    logger.warning(f"Crop not found for image_id: {image_id}")
+                    continue
+                
+                r2_key = crop.get("r2_key")
+                if not r2_key:
+                    continue
+                
+                # Скачиваем файл из S3/R2
+                file_bytes = await self.s3_client.download_bytes(r2_key)
+                if not file_bytes:
+                    logger.warning(f"Failed to download: {r2_key}")
+                    continue
+                
+                # Загружаем в Google File API
+                mime_type = crop.get("mime_type") or "image/png"
+                google_file = await self._upload_to_google(file_bytes, image_id, mime_type)
+                if google_file:
+                    uploaded_files.append(google_file)
+                    logger.info(f"Uploaded image {image_id} to Google: {google_file.get('uri')}")
+                    
+            except Exception as e:
+                logger.error(f"Error fetching image {image_id}: {e}")
+        
+        return uploaded_files
+    
+    async def _fetch_and_upload_zoom(
+        self,
+        image_id: Optional[str],
+        document_ids: Optional[List[UUID]],
+        coords: Optional[List[float]]
+    ) -> List[dict]:
+        """Создать zoom и загрузить в Google File API."""
+        if not image_id or not coords:
+            return []
+        
+        try:
+            crop = await self._find_crop_by_image_id(image_id, document_ids)
+            if not crop:
+                return []
+            
+            r2_key = crop.get("r2_key")
+            if not r2_key:
+                return []
+            
+            # Скачиваем файл
+            file_bytes = await self.s3_client.download_bytes(r2_key)
+            if not file_bytes:
+                return []
+            
+            # Определяем тип файла
+            is_pdf = r2_key.lower().endswith(".pdf")
+            
+            # Вырезаем zoom область
+            zoom_bytes = await self._crop_image(file_bytes, coords, is_pdf)
+            if not zoom_bytes:
+                return []
+            
+            # Загружаем в Google
+            zoom_name = f"zoom_{image_id}_{coords[0]:.2f}_{coords[1]:.2f}"
+            google_file = await self._upload_to_google(zoom_bytes, zoom_name, "image/png")
+            if google_file:
+                logger.info(f"Uploaded zoom to Google: {google_file.get('uri')}")
+                return [google_file]
+            
+        except Exception as e:
+            logger.error(f"Error creating zoom: {e}")
+        
+        return []
+    
+    async def _upload_to_google(self, file_bytes: bytes, name: str, mime_type: str) -> Optional[dict]:
+        """Загрузить файл в Google File API."""
+        try:
+            from google import genai
+            from app.config import settings
+            
+            api_key = self.user.gemini_api_key or settings.default_gemini_api_key
+            if not api_key:
+                return None
+            
+            client = genai.Client(api_key=api_key)
+            
+            # Сохраняем во временный файл
+            import tempfile
+            ext = ".png" if "image" in mime_type else ".pdf"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                tmp.write(file_bytes)
+                tmp_path = tmp.name
+            
+            try:
+                uploaded = client.files.upload(
+                    file=tmp_path,
+                    config={"display_name": name, "mime_type": mime_type}
+                )
+                return {"uri": uploaded.uri, "mime_type": mime_type}
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+        except Exception as e:
+            logger.error(f"Error uploading to Google: {e}")
+            return None
+    
+    async def _crop_image(self, file_bytes: bytes, coords: List[float], is_pdf: bool) -> Optional[bytes]:
+        """Вырезать область из изображения/PDF."""
+        try:
+            if is_pdf:
+                # Рендерим PDF в изображение
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                page = doc[0]
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                doc.close()
+            else:
+                img = Image.open(BytesIO(file_bytes))
+            
+            # Вырезаем область
+            w, h = img.size
+            x1, y1, x2, y2 = coords
+            
+            # Нормализованные координаты
+            if max(coords) <= 1.0:
+                x1, y1, x2, y2 = int(x1*w), int(y1*h), int(x2*w), int(y2*h)
+            
+            cropped = img.crop((x1, y1, x2, y2))
+            
+            # Сохраняем в bytes
+            output = BytesIO()
+            cropped.save(output, format="PNG")
+            return output.getvalue()
+            
+        except Exception as e:
+            logger.error(f"Error cropping image: {e}")
+            return None
     
     async def _process_complex_mode(
         self,

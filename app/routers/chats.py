@@ -269,7 +269,7 @@ async def chat_stream_sse(
     chat_id: UUID,
     client_id: Optional[str] = Query(default=None, description="ID клиента (projects)"),
     document_ids: Optional[List[UUID]] = Query(default=None, description="ID документов для контекста"),
-    google_file_uris: Optional[List[str]] = Query(default=None, description="URI файлов из Google File API"),
+    google_files: Optional[str] = Query(default=None, description="JSON с файлами из Google File API"),
     current_user=Depends(get_current_user),
     supabase: SupabaseClient = Depends(),
     projects_db: SupabaseProjectsClient = Depends(),
@@ -286,13 +286,23 @@ async def chat_stream_sse(
     if not last_user_message:
         raise HTTPException(status_code=404, detail="User message not found")
 
+    # Парсим google_files из JSON
+    parsed_google_files = None
+    if google_files:
+        try:
+            import json
+            parsed_google_files = json.loads(google_files)
+            logger.info(f"Parsed google_files: {parsed_google_files}")
+        except Exception as e:
+            logger.error(f"Failed to parse google_files: {e}")
+
     async def event_generator() -> AsyncGenerator[str, None]:
         async for event in agent.process_message(
             chat_id=chat_id,
             user_message=last_user_message.content,
             client_id=client_id,
             document_ids=document_ids,
-            google_file_uris=google_file_uris,
+            google_file_uris=parsed_google_files,
             save_user_message=False
         ):
             import json
