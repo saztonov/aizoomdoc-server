@@ -28,7 +28,7 @@ class SupabaseProjectsClient:
     
     async def get_tree_nodes(
         self,
-        client_id: str,
+        client_id: Optional[str] = None,
         parent_id: Optional[UUID] = None,
         node_type: Optional[str] = None
     ) -> List[dict]:
@@ -44,7 +44,7 @@ class SupabaseProjectsClient:
             Список узлов дерева
         """
         try:
-            query = self.client.table("tree_nodes").select("*").eq("client_id", client_id)
+            query = self.client.table("tree_nodes").select("*")
             
             if parent_id is None:
                 query = query.is_("parent_id", "null")
@@ -184,5 +184,25 @@ class SupabaseProjectsClient:
         
         except Exception as e:
             logger.error(f"Error searching documents: {e}")
+            return []
+
+    async def search_documents_any(
+        self,
+        query: str,
+        limit: int = 20
+    ) -> List[dict]:
+        """Поиск документов без фильтра client_id (для legacy DB)."""
+        try:
+            response = (
+                self.client.table("tree_nodes")
+                .select("*")
+                .eq("node_type", "document")
+                .or_(f"name.ilike.%{query}%,code.ilike.%{query}%")
+                .limit(limit)
+                .execute()
+            )
+            return response.data
+        except Exception as e:
+            logger.error(f"Error searching documents (any): {e}")
             return []
 

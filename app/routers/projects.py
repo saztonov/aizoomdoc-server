@@ -18,7 +18,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 @router.get("/tree", response_model=List[TreeNode])
 async def get_tree_nodes(
-    client_id: str = Query(..., description="ID клиента"),
+    client_id: Optional[str] = Query(None, description="ID клиента (опционально)"),
     parent_id: Optional[UUID] = Query(None, description="ID родительского узла (None для корневых)"),
     node_type: Optional[str] = Query(None, description="Тип узла (client, project, section, stage, task, document)"),
     user_id: UUID = Depends(get_current_user_id),
