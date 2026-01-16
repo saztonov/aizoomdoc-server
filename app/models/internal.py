@@ -35,6 +35,12 @@ class Settings(BaseModel):
     model_profile: Literal["simple", "complex"] = Field(default="simple")
     selected_role_prompt_id: Optional[int] = None  # bigint в БД
     page_settings: Dict[str, Any] = Field(default_factory=dict)
+    # LLM параметры
+    temperature: float = Field(default=1.0)
+    top_p: float = Field(default=0.95)
+    thinking_enabled: bool = Field(default=True)
+    thinking_budget: int = Field(default=0)
+    media_resolution: str = Field(default="high")
     created_at: datetime
     updated_at: datetime
 

@@ -138,12 +138,41 @@ class LLMService:
                 genai_types.Content(role="user", parts=user_parts)
             )
             
+            # Получаем параметры из настроек пользователя или дефолтные
+            user_settings = self.user.settings
+            temperature = getattr(user_settings, 'temperature', None) or settings.llm_temperature
+            top_p = getattr(user_settings, 'top_p', None) or settings.llm_top_p
+            thinking_enabled = getattr(user_settings, 'thinking_enabled', True)
+            thinking_budget = getattr(user_settings, 'thinking_budget', 0)
+            media_resolution = getattr(user_settings, 'media_resolution', 'high')
+            
+            logger.info(f"LLM params: temp={temperature}, top_p={top_p}, thinking={thinking_enabled}, budget={thinking_budget}, media={media_resolution}")
+            
             # Конфигурация генерации
-            generation_config = genai_types.GenerateContentConfig(
-                temperature=settings.llm_temperature,
-                top_p=settings.llm_top_p,
-                max_output_tokens=settings.max_tokens,
-            )
+            config_params = {
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_output_tokens": settings.max_tokens,
+            }
+            
+            # Добавляем thinking config если включен
+            if thinking_enabled and hasattr(genai_types, 'ThinkingConfig'):
+                thinking_config = genai_types.ThinkingConfig(
+                    thinking_budget=thinking_budget if thinking_budget > 0 else None
+                )
+                config_params["thinking_config"] = thinking_config
+            
+            # Добавляем media resolution
+            if hasattr(genai_types, 'MediaResolution'):
+                media_res_map = {
+                    "low": genai_types.MediaResolution.MEDIA_RESOLUTION_LOW,
+                    "medium": genai_types.MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+                    "high": genai_types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+                }
+                if media_resolution in media_res_map:
+                    config_params["media_resolution"] = media_res_map[media_resolution]
+            
+            generation_config = genai_types.GenerateContentConfig(**config_params)
             
             # Стриминг ответа
             response = self.client.models.generate_content_stream(

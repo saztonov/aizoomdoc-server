@@ -43,12 +43,23 @@ class UserSettings(BaseModel):
         default=None,
         description="ID выбранной роли из prompts_user"
     )
+    # LLM параметры
+    temperature: float = Field(default=1.0, ge=0.0, le=2.0, description="Температура генерации")
+    top_p: float = Field(default=0.95, ge=0.0, le=1.0, description="Top-p sampling")
+    thinking_enabled: bool = Field(default=True, description="Включить режим thinking (deep think)")
+    thinking_budget: int = Field(default=0, ge=0, le=24576, description="Бюджет токенов для thinking (0=авто)")
+    media_resolution: Literal["low", "medium", "high"] = Field(default="high", description="Разрешение медиафайлов")
 
 
 class UserSettingsUpdate(BaseModel):
     """Запрос обновления настроек пользователя."""
     model_profile: Optional[Literal["simple", "complex"]] = None
     selected_role_prompt_id: Optional[int] = None
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    thinking_enabled: Optional[bool] = None
+    thinking_budget: Optional[int] = Field(default=None, ge=0, le=24576)
+    media_resolution: Optional[Literal["low", "medium", "high"]] = None
 
 
 class UserMeResponse(BaseModel):
