@@ -30,7 +30,8 @@ class SupabaseProjectsClient:
         self,
         client_id: Optional[str] = None,
         parent_id: Optional[UUID] = None,
-        node_type: Optional[str] = None
+        node_type: Optional[str] = None,
+        all_nodes: bool = False
     ) -> List[dict]:
         """
         Получить узлы дерева проектов.
@@ -39,6 +40,7 @@ class SupabaseProjectsClient:
             client_id: ID клиента
             parent_id: ID родительского узла (None для корневых)
             node_type: Тип узла (client, project, section, stage, task, document)
+            all_nodes: Если True, возвращает все узлы (игнорирует parent_id)
         
         Returns:
             Список узлов дерева
@@ -46,10 +48,12 @@ class SupabaseProjectsClient:
         try:
             query = self.client.table("tree_nodes").select("*")
             
-            if parent_id is None:
-                query = query.is_("parent_id", "null")
-            else:
-                query = query.eq("parent_id", str(parent_id))
+            # Если all_nodes=True, не фильтруем по parent_id
+            if not all_nodes:
+                if parent_id is None:
+                    query = query.is_("parent_id", "null")
+                else:
+                    query = query.eq("parent_id", str(parent_id))
             
             if node_type:
                 query = query.eq("node_type", node_type)

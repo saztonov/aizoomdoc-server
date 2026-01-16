@@ -21,6 +21,7 @@ async def get_tree_nodes(
     client_id: Optional[str] = Query(None, description="ID клиента (опционально)"),
     parent_id: Optional[UUID] = Query(None, description="ID родительского узла (None для корневых)"),
     node_type: Optional[str] = Query(None, description="Тип узла (client, project, section, stage, task, document)"),
+    all_nodes: bool = Query(False, description="Получить все узлы (игнорировать parent_id)"),
     user_id: UUID = Depends(get_current_user_id),
     projects_db: SupabaseProjectsClient = Depends()
 ):
@@ -31,6 +32,7 @@ async def get_tree_nodes(
         client_id: ID клиента
         parent_id: ID родительского узла
         node_type: Тип узла
+        all_nodes: Получить все узлы дерева
         user_id: ID текущего пользователя
         projects_db: Клиент Projects DB
     
@@ -40,7 +42,8 @@ async def get_tree_nodes(
     nodes = await projects_db.get_tree_nodes(
         client_id=client_id,
         parent_id=parent_id,
-        node_type=node_type
+        node_type=node_type,
+        all_nodes=all_nodes
     )
     
     return [TreeNode(**node) for node in nodes]
