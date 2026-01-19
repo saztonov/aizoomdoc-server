@@ -1,20 +1,25 @@
 """
 Evidence service for rendering PDF crops to PNG and generating preview/quadrants/ROI.
+
+Uses LRU/versioned cache for efficient PDF render caching with:
+- Version-based invalidation (etag/last_modified from S3)
+- Size-limited cache with LRU eviction
+- TTL-based expiration
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Optional
+from io import BytesIO
+from typing import Iterable, Optional, Tuple
 
 import fitz  # PyMuPDF
 from PIL import Image
 
 from app.config import settings
+from app.services.render_cache import get_render_cache, RenderCacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -34,21 +39,69 @@ class RenderedImage:
 class EvidenceService:
     """Render PDF crops to PNG and generate preview/quadrants/ROI."""
 
-    def __init__(self, cache_dir: Optional[Path] = None) -> None:
-        if cache_dir is None:
-            cache_dir = Path(tempfile.gettempdir()) / "aizoomdoc_evidence_cache"
-        self.cache_dir = cache_dir
-        self.renders_dir = cache_dir / "renders"
-        self.renders_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, cache_manager: Optional[RenderCacheManager] = None) -> None:
+        """
+        Initialize EvidenceService.
+        
+        Args:
+            cache_manager: Optional custom cache manager (uses global by default)
+        """
+        self.cache = cache_manager or get_render_cache()
 
-    def _hash_key(self, key: str) -> str:
-        return hashlib.md5(key.encode("utf-8")).hexdigest()
-
-    def _render_cache_path(self, cache_key: str, page: int, dpi: int) -> Path:
-        safe = self._hash_key(f"{cache_key}:{page}:{dpi}")
-        return self.renders_dir / f"{safe}.png"
+    def _compute_content_hash(self, pdf_bytes: bytes) -> str:
+        """Compute SHA256 hash of PDF content as fallback version."""
+        return hashlib.sha256(pdf_bytes).hexdigest()[:16]
 
     def render_pdf_page(
+        self,
+        pdf_bytes: bytes,
+        *,
+        source_id: str,
+        source_version: Optional[str] = None,
+        page: int = 0,
+        dpi: int = 150,
+    ) -> Image.Image:
+        """
+        Render a PDF page to PIL Image with LRU/versioned caching.
+        
+        Args:
+            pdf_bytes: PDF file bytes
+            source_id: Source identifier (r2_key or URL)
+            source_version: Version of source (etag/last_modified), computed if None
+            page: Page number to render
+            dpi: DPI for rendering
+            
+        Returns:
+            PIL Image of the rendered page
+        """
+        # Use content hash if no version provided
+        if source_version is None:
+            source_version = self._compute_content_hash(pdf_bytes)
+        
+        # Try cache first
+        cached = self.cache.get(source_id, source_version, page, dpi)
+        if cached is not None:
+            logger.debug(f"Cache hit: {source_id}:{page}@{dpi}")
+            return Image.open(BytesIO(cached)).convert("RGB")
+
+        # Render PDF
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        try:
+            page_obj = doc.load_page(page)
+            zoom = dpi / 72.0
+            pix = page_obj.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            
+            # Cache the result
+            png_bytes = self._to_png_bytes(img)
+            self.cache.put(source_id, source_version, page, dpi, png_bytes)
+            logger.debug(f"Cache miss, stored: {source_id}:{page}@{dpi}")
+            
+            return img
+        finally:
+            doc.close()
+    
+    def render_pdf_page_legacy(
         self,
         pdf_bytes: bytes,
         *,
@@ -56,21 +109,17 @@ class EvidenceService:
         page: int = 0,
         dpi: int = 150,
     ) -> Image.Image:
-        """Render a PDF page to PIL Image with disk caching."""
-        cache_path = self._render_cache_path(cache_key, page, dpi)
-        if cache_path.exists():
-            return Image.open(cache_path).convert("RGB")
-
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        try:
-            page_obj = doc.load_page(page)
-            zoom = dpi / 72.0
-            pix = page_obj.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            img.save(cache_path, format="PNG")
-            return img
-        finally:
-            doc.close()
+        """
+        Legacy render method for backward compatibility.
+        Uses cache_key as both source_id and computes version from content.
+        """
+        return self.render_pdf_page(
+            pdf_bytes,
+            source_id=cache_key,
+            source_version=None,  # Will compute hash
+            page=page,
+            dpi=dpi,
+        )
 
     def _scale_to_max_side(self, img: Image.Image, max_side: int) -> tuple[Image.Image, float]:
         w, h = img.size
@@ -88,12 +137,31 @@ class EvidenceService:
         self,
         pdf_bytes: bytes,
         *,
-        cache_key: str,
+        source_id: str,
+        source_version: Optional[str] = None,
         page: int = 0,
         dpi: int = 150,
     ) -> list[RenderedImage]:
-        """Generate preview and optional quadrants from a PDF crop."""
-        base_img = self.render_pdf_page(pdf_bytes, cache_key=cache_key, page=page, dpi=dpi)
+        """
+        Generate preview and optional quadrants from a PDF crop.
+        
+        Args:
+            pdf_bytes: PDF file bytes
+            source_id: Source identifier (r2_key or URL)
+            source_version: Version of source (etag/last_modified)
+            page: Page number to render
+            dpi: DPI for rendering
+            
+        Returns:
+            List of RenderedImage (overview + optional quadrants)
+        """
+        base_img = self.render_pdf_page(
+            pdf_bytes,
+            source_id=source_id,
+            source_version=source_version,
+            page=page,
+            dpi=dpi,
+        )
         w, h = base_img.size
 
         preview_img, scale_factor = self._scale_to_max_side(base_img, settings.preview_max_side)
@@ -136,16 +204,59 @@ class EvidenceService:
         self,
         pdf_bytes: bytes,
         *,
-        cache_key: str,
+        source_id: str,
+        source_version: Optional[str] = None,
         bbox_norm: Iterable[float],
         page: int = 0,
         dpi: int = 300,
     ) -> RenderedImage:
-        """Render ROI from PDF at requested DPI and return PNG bytes."""
-        base_img = self.render_pdf_page(pdf_bytes, cache_key=cache_key, page=page, dpi=dpi)
+        """
+        Render ROI from PDF at requested DPI and return PNG bytes.
+        
+        Args:
+            pdf_bytes: PDF file bytes
+            source_id: Source identifier (r2_key or URL)
+            source_version: Version of source (etag/last_modified)
+            bbox_norm: Normalized bounding box [x1, y1, x2, y2]
+            page: Page number to render
+            dpi: DPI for rendering
+            
+        Returns:
+            RenderedImage with ROI PNG
+        """
+        bbox_tuple: Tuple[float, float, float, float] = tuple(bbox_norm)[:4]  # type: ignore
+        
+        # Check ROI cache first
+        cached_roi = self.cache.get(source_id, source_version or self._compute_content_hash(pdf_bytes), page, dpi, bbox_tuple)
+        if cached_roi is not None:
+            img = Image.open(BytesIO(cached_roi)).convert("RGB")
+            return RenderedImage(
+                kind="roi",
+                png_bytes=cached_roi,
+                width=img.size[0],
+                height=img.size[1],
+                scale_factor=1.0,
+                bbox_norm=list(bbox_norm),
+            )
+        
+        # Compute version if not provided (for caching)
+        if source_version is None:
+            source_version = self._compute_content_hash(pdf_bytes)
+        
+        base_img = self.render_pdf_page(
+            pdf_bytes,
+            source_id=source_id,
+            source_version=source_version,
+            page=page,
+            dpi=dpi,
+        )
         crop = self._crop_norm(base_img, list(bbox_norm))
         crop_img, crop_scale = self._scale_to_max_side(crop, settings.zoom_preview_max_side)
         crop_bytes = self._to_png_bytes(crop_img)
+        
+        # Cache the ROI
+        self.cache.put(source_id, source_version, page, dpi, crop_bytes, bbox_tuple)
+        
         return RenderedImage(
             kind="roi",
             png_bytes=crop_bytes,

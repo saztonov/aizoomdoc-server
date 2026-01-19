@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     llm_log_dir: str = Field(default="logs", alias="LLM_LOG_DIR")
     llm_log_truncate_chars: int = Field(default=20000, alias="LLM_LOG_TRUNCATE_CHARS")
     
+    # Evidence Render Cache (LRU)
+    evidence_cache_enabled: bool = Field(default=True, alias="EVIDENCE_CACHE_ENABLED")
+    evidence_cache_dir: str = Field(default="", alias="EVIDENCE_CACHE_DIR")
+    evidence_cache_max_mb: int = Field(default=2000, alias="EVIDENCE_CACHE_MAX_MB")
+    evidence_cache_ttl_days: int = Field(default=14, alias="EVIDENCE_CACHE_TTL_DAYS")
+    
     # File Upload
     max_file_size_mb: int = Field(default=100, alias="MAX_FILE_SIZE_MB")
     

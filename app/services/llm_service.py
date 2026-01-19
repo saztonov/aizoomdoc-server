@@ -184,8 +184,20 @@ class LLMService:
             )
             
             for chunk in response:
-                if chunk.text:
-                    yield chunk.text
+                # Проверяем на наличие thinking content в частях ответа
+                if hasattr(chunk, 'candidates') and chunk.candidates:
+                    for candidate in chunk.candidates:
+                        if hasattr(candidate, 'content') and candidate.content:
+                            for part in candidate.content.parts:
+                                # Проверяем, это thinking или обычный текст
+                                if hasattr(part, 'thought') and part.thought:
+                                    # Это thinking content
+                                    yield {"type": "thinking", "content": part.text or ""}
+                                elif hasattr(part, 'text') and part.text:
+                                    yield {"type": "text", "content": part.text}
+                elif chunk.text:
+                    # Fallback для простого текстового ответа
+                    yield {"type": "text", "content": chunk.text}
         
         except Exception as e:
             logger.error(f"Error in generate_simple: {e}")

@@ -174,8 +174,10 @@ class StreamEvent(BaseModel):
         "phase_started",
         "phase_progress",
         "llm_token",
+        "llm_thinking",
         "llm_final",
         "tool_call",
+        "image_ready",
         "error",
         "completed"
     ]

@@ -213,6 +213,37 @@ class S3Client:
         except ClientError:
             return False
     
+    async def get_file_version(self, key: str) -> Optional[str]:
+        """
+        Получить версию файла (ETag или LastModified) для кеширования.
+        
+        Args:
+            key: Ключ файла в S3
+        
+        Returns:
+            Строка версии (ETag или LastModified) или None при ошибке
+        """
+        try:
+            response = self.s3_client.head_object(
+                Bucket=self.bucket_name,
+                Key=key
+            )
+            
+            # Prefer ETag, fallback to LastModified
+            etag = response.get("ETag", "").strip('"')
+            if etag:
+                return etag
+            
+            last_modified = response.get("LastModified")
+            if last_modified:
+                return last_modified.isoformat()
+            
+            return None
+        
+        except ClientError as e:
+            logger.error(f"Error getting file version from S3: {e}")
+            return None
+    
     def generate_key(self, user_id: str, filename: str, prefix: str = "uploads") -> str:
         """
         Сгенерировать уникальный ключ для файла.

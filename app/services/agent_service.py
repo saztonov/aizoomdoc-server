@@ -496,7 +496,7 @@ class AgentService:
                 continue
 
             renders = self.evidence_service.build_preview_and_quadrants(
-                pdf_bytes, cache_key=cache_key or req.block_id, page=0, dpi=150
+                pdf_bytes, source_id=cache_key or req.block_id, page=0, dpi=150
             )
             for render in renders:
                 material = await upload_render(req.block_id, render)
@@ -542,7 +542,7 @@ class AgentService:
             if dpi > 400:
                 dpi = 400
             render = self.evidence_service.build_roi(
-                pdf_bytes, cache_key=cache_key or roi.block_id, bbox_norm=roi.bbox_norm, page=page_index, dpi=dpi
+                pdf_bytes, source_id=cache_key or roi.block_id, bbox_norm=roi.bbox_norm, page=page_index, dpi=dpi
             )
             material = await upload_render(roi.block_id, render)
             if material:
@@ -678,6 +678,10 @@ class AgentService:
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
+                
+                # Отправляем события о готовых изображениях
+                for img_event in self._create_image_events(materials_json, "followup"):
+                    yield img_event
 
                 if not google_files:
                     logger.warning("No PNG files produced for followups")
@@ -816,6 +820,10 @@ class AgentService:
         )
         if llm_logger:
             llm_logger.log_section("MATERIALS_JSON", materials_json)
+        
+        # Отправляем события о готовых изображениях
+        for img_event in self._create_image_events(materials_json, "compare_materials"):
+            yield img_event
 
         # Pro answer
         yield self._create_phase_event("pro_stage", "Pro сравнивает документы...")
@@ -870,6 +878,10 @@ class AgentService:
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
+                
+                # Отправляем события о готовых изображениях
+                for img_event in self._create_image_events(materials_json, "compare_followup"):
+                    yield img_event
                 continue
 
             final_answer = answer
@@ -916,7 +928,7 @@ class AgentService:
                     continue
 
                 renders = self.evidence_service.build_preview_and_quadrants(
-                    file_bytes, cache_key=r2_key, page=0, dpi=150
+                    file_bytes, source_id=r2_key, page=0, dpi=150
                 )
                 for render in renders:
                     google_file = await self._upload_png_to_google(render.png_bytes, f"{image_id}_{render.kind}")
@@ -1162,6 +1174,10 @@ class AgentService:
         )
         if llm_logger:
             llm_logger.log_section("MATERIALS_JSON", materials_json)
+        
+        # Отправляем события о готовых изображениях
+        for img_event in self._create_image_events(materials_json, "initial_materials"):
+            yield img_event
 
         # Этап 3: Pro отвечает
         yield self._create_phase_event("pro_stage", "Pro формирует ответ...")
@@ -1238,6 +1254,10 @@ class AgentService:
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
+                
+                # Отправляем события о готовых изображениях
+                for img_event in self._create_image_events(materials_json, "pro_followup"):
+                    yield img_event
                 continue
 
             final_answer = answer
@@ -1528,16 +1548,38 @@ class AgentService:
         full_message = f"{original_context}\n\n{extra_context}\n\nЗАПРОС ПОЛЬЗОВАТЕЛЯ: {user_message}"
 
         accumulated = ""
-        async for token in self.llm_service.generate_simple(
+        accumulated_thinking = ""
+        async for chunk in self.llm_service.generate_simple(
             user_message=full_message,
             system_prompt=system_prompt
         ):
-            accumulated += token
-            yield StreamEvent(
-                event="llm_token",
-                data=LLMTokenEvent(token=token, accumulated=accumulated).dict(),
-                timestamp=datetime.utcnow()
-            )
+            # Обработка нового формата с type/content
+            if isinstance(chunk, dict):
+                chunk_type = chunk.get("type", "text")
+                content = chunk.get("content", "")
+                
+                if chunk_type == "thinking" and content:
+                    accumulated_thinking += content
+                    yield StreamEvent(
+                        event="llm_thinking",
+                        data={"content": content, "accumulated": accumulated_thinking},
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "text" and content:
+                    accumulated += content
+                    yield StreamEvent(
+                        event="llm_token",
+                        data=LLMTokenEvent(token=content, accumulated=accumulated).dict(),
+                        timestamp=datetime.utcnow()
+                    )
+            else:
+                # Fallback для старого формата (строка)
+                accumulated += str(chunk)
+                yield StreamEvent(
+                    event="llm_token",
+                    data=LLMTokenEvent(token=str(chunk), accumulated=accumulated).dict(),
+                    timestamp=datetime.utcnow()
+                )
 
         await self.supabase.add_message(
             chat_id=chat_id,
@@ -1547,7 +1589,7 @@ class AgentService:
 
         yield StreamEvent(
             event="llm_final",
-            data={"content": accumulated},
+            data={"content": accumulated, "thinking": accumulated_thinking},
             timestamp=datetime.utcnow()
         )
 
@@ -1636,5 +1678,54 @@ class AgentService:
             ).dict(),
             timestamp=datetime.utcnow()
         )
+    
+    def _create_image_events(
+        self,
+        materials_json: dict,
+        reason: str = ""
+    ) -> List[StreamEvent]:
+        """
+        Создать события image_ready для всех изображений в materials_json.
+        
+        Args:
+            materials_json: Словарь с материалами (включает images)
+            reason: Причина запроса изображений
+        
+        Returns:
+            Список событий image_ready
+        """
+        events = []
+        images = materials_json.get("images", [])
+        
+        for img in images:
+            # img может быть dict или MaterialImage
+            if hasattr(img, "model_dump"):
+                img_data = img.model_dump()
+            elif isinstance(img, dict):
+                img_data = img
+            else:
+                continue
+            
+            block_id = img_data.get("block_id", "")
+            kind = img_data.get("kind", "preview")
+            png_uri = img_data.get("png_uri", "")
+            width = img_data.get("width")
+            height = img_data.get("height")
+            
+            if png_uri:
+                events.append(StreamEvent(
+                    event="image_ready",
+                    data={
+                        "block_id": block_id,
+                        "kind": kind,
+                        "url": png_uri,
+                        "width": width,
+                        "height": height,
+                        "reason": reason
+                    },
+                    timestamp=datetime.utcnow()
+                ))
+        
+        return events
 
 
