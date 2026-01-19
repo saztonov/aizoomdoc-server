@@ -406,6 +406,7 @@ class AgentService:
         existing_materials: Optional[dict] = None,
         llm_logger: Optional[LLMDialogLogger] = None,
         html_crop_map: Optional[Dict[str, str]] = None,
+        chat_id: Optional[UUID] = None,
     ) -> tuple[dict, List[dict]]:
         blocks_by_id: Dict[str, SelectedBlock] = {b.block_id: b for b in selected_blocks}
         for req in requested_images:
@@ -445,8 +446,9 @@ class AgentService:
                 return None
             google_files.append(google_file)
             
-            # Также загружаем PNG в R2 для публичного доступа клиентом
+            # Загружаем PNG в R2 для публичного доступа клиентом
             public_url = None
+            r2_key = None
             try:
                 r2_key = f"chat_images/{file_name}_{uuid4().hex[:8]}.png"
                 public_url = await self.s3_client.upload_bytes(
@@ -457,6 +459,22 @@ class AgentService:
             except Exception as e:
                 logger.warning(f"Failed to upload PNG to R2: {e}")
             
+            # Регистрируем файл в БД storage_files
+            storage_file = None
+            if public_url and r2_key and chat_id:
+                try:
+                    storage_file = await self.supabase.register_file(
+                        user_id=self.user.user.id,
+                        filename=f"{file_name}.png",
+                        mime_type="image/png",
+                        size_bytes=len(render.png_bytes),
+                        storage_path=r2_key,
+                        source_type="chat_render",
+                        external_url=public_url
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to register file in DB: {e}")
+            
             if llm_logger:
                 llm_logger.log_section(
                     "UPLOAD_PNG",
@@ -466,6 +484,7 @@ class AgentService:
                         "bbox_norm": render.bbox_norm,
                         "uri": google_file.get("uri"),
                         "public_url": public_url,
+                        "storage_file_id": str(storage_file.id) if storage_file else None,
                     },
                 )
             return MaterialImage(
@@ -690,6 +709,7 @@ class AgentService:
                     existing_materials=materials_json,
                     llm_logger=llm_logger,
                     html_crop_map=html_crop_map,
+                    chat_id=chat_id,
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
@@ -832,6 +852,7 @@ class AgentService:
             requested_rois=combined_rois,
             block_map=block_map,
             llm_logger=llm_logger,
+            chat_id=chat_id,
         )
         if llm_logger:
             llm_logger.log_section("MATERIALS_JSON", materials_json)
@@ -890,6 +911,7 @@ class AgentService:
                     block_map=block_map,
                     existing_materials=materials_json,
                     llm_logger=llm_logger,
+                    chat_id=chat_id,
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
@@ -1186,6 +1208,7 @@ class AgentService:
             block_map=block_map,
             llm_logger=llm_logger,
             html_crop_map=html_crop_map,
+            chat_id=chat_id,
         )
         if llm_logger:
             llm_logger.log_section("MATERIALS_JSON", materials_json)
@@ -1271,6 +1294,7 @@ class AgentService:
                     existing_materials=materials_json,
                     llm_logger=llm_logger,
                     html_crop_map=html_crop_map,
+                    chat_id=chat_id,
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)

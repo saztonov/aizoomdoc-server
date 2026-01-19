@@ -620,9 +620,9 @@ class SupabaseClient:
             self.client.table("chat_images").delete().eq("chat_id", chat_id_str).execute()
             logger.debug(f"Deleted chat_images for chat {chat_id}")
             
-            # 2. Удалить messages
-            self.client.table("messages").delete().eq("chat_id", chat_id_str).execute()
-            logger.debug(f"Deleted messages for chat {chat_id}")
+            # 2. Удалить chat_messages
+            self.client.table("chat_messages").delete().eq("chat_id", chat_id_str).execute()
+            logger.debug(f"Deleted chat_messages for chat {chat_id}")
             
             # 3. Удалить сам чат
             self.client.table("chats").delete().eq("id", chat_id_str).execute()
