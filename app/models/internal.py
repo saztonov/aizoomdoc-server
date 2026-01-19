@@ -185,3 +185,4 @@ class SearchResult(BaseModel):
     query: str
     total_blocks_found: int
 
+

@@ -142,3 +142,4 @@ class ImageService:
         """Определить нужны ли квадранты."""
         return scale_factor >= settings.auto_quadrants_threshold
 
+

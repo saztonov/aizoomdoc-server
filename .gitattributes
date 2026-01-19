@@ -1,0 +1,35 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Force LF for all text files
+*.py text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+*.sh text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+
+# Dockerfile
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+# Config files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.env.example text eol=lf
+env.example text eol=lf
+
+# Binary files - do not touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+

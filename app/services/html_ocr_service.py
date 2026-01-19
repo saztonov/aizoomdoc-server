@@ -146,3 +146,4 @@ class HtmlOcrService:
         lower = url.lower()
         return lower.endswith(".pdf") or lower.endswith(".png") or lower.endswith(".jpg") or lower.endswith(".jpeg") or lower.endswith(".webp")
 
+

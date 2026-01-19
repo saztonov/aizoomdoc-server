@@ -300,3 +300,4 @@ Error: Gemini API key not configured
 3. Проверьте статус сервисов (Supabase, R2)
 4. Создайте issue в репозитории
 
+

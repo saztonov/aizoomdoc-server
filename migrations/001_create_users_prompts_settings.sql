@@ -120,3 +120,4 @@ FROM users
 WHERE NOT EXISTS (SELECT 1 FROM settings WHERE settings.user_id = users.username)
 ON CONFLICT (user_id) DO NOTHING;
 
+

@@ -359,3 +359,4 @@ async def chat_stream(
         logger.error(f"Error in WebSocket: {e}")
         await websocket.close(code=1011, reason=str(e))
 
+

@@ -277,3 +277,4 @@ class ErrorResponse(BaseModel):
     message: str = Field(..., description="Сообщение об ошибке")
     details: Optional[Dict[str, Any]] = Field(None, description="Детали ошибки")
 
+

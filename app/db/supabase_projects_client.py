@@ -210,3 +210,4 @@ class SupabaseProjectsClient:
             logger.error(f"Error searching documents (any): {e}")
             return []
 
+
