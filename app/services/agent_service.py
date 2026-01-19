@@ -8,7 +8,7 @@ import os
 import re
 from typing import Optional, AsyncGenerator, Dict, Any, List
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from io import BytesIO
 
@@ -444,6 +444,19 @@ class AgentService:
             if not google_file:
                 return None
             google_files.append(google_file)
+            
+            # Также загружаем PNG в R2 для публичного доступа клиентом
+            public_url = None
+            try:
+                r2_key = f"chat_images/{file_name}_{uuid4().hex[:8]}.png"
+                public_url = await self.s3_client.upload_bytes(
+                    render.png_bytes,
+                    r2_key,
+                    content_type="image/png"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to upload PNG to R2: {e}")
+            
             if llm_logger:
                 llm_logger.log_section(
                     "UPLOAD_PNG",
@@ -452,12 +465,14 @@ class AgentService:
                         "kind": render.kind,
                         "bbox_norm": render.bbox_norm,
                         "uri": google_file.get("uri"),
+                        "public_url": public_url,
                     },
                 )
             return MaterialImage(
                 block_id=block_id,
                 kind=render.kind,
                 png_uri=google_file["uri"],
+                public_url=public_url,
                 width=render.width,
                 height=render.height,
                 scale_factor=render.scale_factor,
@@ -1176,7 +1191,12 @@ class AgentService:
             llm_logger.log_section("MATERIALS_JSON", materials_json)
         
         # Отправляем события о готовых изображениях
-        for img_event in self._create_image_events(materials_json, "initial_materials"):
+        image_events = self._create_image_events(materials_json, "initial_materials")
+        logger.info(f"Created {len(image_events)} image_ready events")
+        if llm_logger:
+            llm_logger.log_section("IMAGE_EVENTS_COUNT", {"count": len(image_events)})
+        for img_event in image_events:
+            logger.info(f"Yielding image_ready event: {img_event.data.get('block_id')}")
             yield img_event
 
         # Этап 3: Pro отвечает
@@ -1708,17 +1728,20 @@ class AgentService:
             
             block_id = img_data.get("block_id", "")
             kind = img_data.get("kind", "preview")
+            # Приоритет: public_url (публичный R2), затем png_uri (Google File API)
+            public_url = img_data.get("public_url")
             png_uri = img_data.get("png_uri", "")
+            url = public_url or png_uri
             width = img_data.get("width")
             height = img_data.get("height")
             
-            if png_uri:
+            if url:
                 events.append(StreamEvent(
                     event="image_ready",
                     data={
                         "block_id": block_id,
                         "kind": kind,
-                        "url": png_uri,
+                        "url": url,
                         "width": width,
                         "height": height,
                         "reason": reason

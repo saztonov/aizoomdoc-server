@@ -63,6 +63,7 @@ class MaterialImage(LLMBaseModel):
     block_id: str = Field(..., description="Image block ID")
     kind: Literal["overview", "quadrant", "roi"] = Field(..., description="Image kind")
     png_uri: str = Field(..., description="PNG URI in Google File API")
+    public_url: Optional[str] = Field(default=None, description="Public URL for client download")
     width: Optional[int] = Field(default=None, ge=1, description="PNG width")
     height: Optional[int] = Field(default=None, ge=1, description="PNG height")
     scale_factor: Optional[float] = Field(default=None, ge=0.0, description="Preview scale factor")
