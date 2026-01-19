@@ -23,17 +23,21 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Жизненный цикл приложения."""
     from app.services.deletion_service import deletion_service
+    from app.services.queue_service import queue_service
     
     logger.info("Starting AIZoomDoc Server...")
     logger.info(f"Debug mode: {settings.debug}")
     logger.info(f"CORS origins: {settings.cors_origins_list}")
+    logger.info(f"Request queue: max_concurrent={settings.queue_max_concurrent}, max_size={settings.queue_max_size}")
     
     # Startup
     await deletion_service.start()
+    await queue_service.start()
     
     yield
     
     # Shutdown
+    await queue_service.stop()
     await deletion_service.stop()
     logger.info("Shutting down AIZoomDoc Server...")
 

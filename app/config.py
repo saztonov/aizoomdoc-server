@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     # File Upload
     max_file_size_mb: int = Field(default=100, alias="MAX_FILE_SIZE_MB")
     
+    # Request Queue
+    queue_max_concurrent: int = Field(default=2, alias="MAX_CONCURRENT_REQUESTS")
+    queue_max_size: int = Field(default=50, alias="MAX_QUEUE_SIZE")
+    queue_timeout_seconds: int = Field(default=300, alias="REQUEST_TIMEOUT")
+    
     # CORS
     cors_origins: str = Field(default="http://localhost:3000,http://localhost:5173", alias="CORS_ORIGINS")
     

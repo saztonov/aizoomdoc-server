@@ -13,6 +13,7 @@ from app.db.supabase_client import SupabaseClient
 from app.db.supabase_projects_client import SupabaseProjectsClient
 from app.db.s3_client import S3Client
 from app.services.agent_service import AgentService
+from app.services.queue_service import queue_service
 from app.models.api import (
     ChatCreate,
     ChatResponse,
@@ -328,9 +329,19 @@ async def chat_stream_sse(
     projects_db: SupabaseProjectsClient = Depends(),
 ):
     """
-    SSE стрим обработки сообщения.
+    SSE стрим обработки сообщения с очередью запросов.
+    
     Ожидает, что сообщение пользователя уже сохранено через POST /chats/{chat_id}/messages.
+    
+    События очереди:
+    - queue_position: позиция в очереди {position, estimated_wait_seconds}
+    - processing_started: запрос начал обрабатываться
+    
+    Далее стандартные события:
+    - phase_started, phase_progress, llm_token, llm_final, tool_call, error, completed
     """
+    import json as json_module
+    
     s3_client = S3Client()
     agent = AgentService(current_user, supabase, projects_db, s3_client)
 
@@ -343,13 +354,13 @@ async def chat_stream_sse(
     parsed_google_files = None
     if google_files:
         try:
-            import json
-            parsed_google_files = json.loads(google_files)
+            parsed_google_files = json_module.loads(google_files)
             logger.info(f"Parsed google_files: {parsed_google_files}")
         except Exception as e:
             logger.error(f"Failed to parse google_files: {e}")
 
-    async def event_generator() -> AsyncGenerator[str, None]:
+    # Функция-генератор для обработки (будет вызвана из очереди)
+    async def process_request():
         async for event in agent.process_message(
             chat_id=chat_id,
             user_message=last_user_message.content,
@@ -360,10 +371,26 @@ async def chat_stream_sse(
             google_file_uris=parsed_google_files,
             save_user_message=False
         ):
-            import json
-            payload = json.dumps(event.data, ensure_ascii=False)
-            yield f"event: {event.event}\n"
-            yield f"data: {payload}\n\n"
+            # Конвертируем StreamEvent в dict для очереди
+            yield {
+                "event": event.event,
+                "data": event.data,
+                "timestamp": event.timestamp.isoformat() if event.timestamp else None
+            }
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            # Обрабатываем через очередь
+            async for event in queue_service.execute_with_queue(chat_id, process_request):
+                event_name = event.get("event", "unknown")
+                payload = json_module.dumps(event.get("data", {}), ensure_ascii=False)
+                yield f"event: {event_name}\n"
+                yield f"data: {payload}\n\n"
+        except RuntimeError as e:
+            # Очередь переполнена или другая ошибка
+            error_payload = json_module.dumps({"message": str(e)}, ensure_ascii=False)
+            yield f"event: error\n"
+            yield f"data: {error_payload}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
