@@ -564,4 +564,73 @@ class SupabaseClient:
         except Exception as e:
             logger.error(f"Error getting file: {e}")
             return None
+    
+    # ===== DELETION METHODS =====
+    
+    async def get_chat_storage_files(self, chat_id: UUID) -> List[Dict[str, Any]]:
+        """
+        Получить все storage_files, связанные с чатом через chat_images.
+        
+        Args:
+            chat_id: UUID чата
+        
+        Returns:
+            Список словарей с информацией о файлах (id, storage_path)
+        """
+        try:
+            # Получаем chat_images с join на storage_files
+            response = (
+                self.client.table("chat_images")
+                .select("file_id, storage_files(id, storage_path)")
+                .eq("chat_id", str(chat_id))
+                .execute()
+            )
+            
+            files = []
+            for item in response.data:
+                storage_file = item.get("storage_files")
+                if storage_file:
+                    files.append(storage_file)
+            
+            return files
+        
+        except Exception as e:
+            logger.error(f"Error getting chat storage files: {e}")
+            return []
+    
+    async def delete_chat_cascade(self, chat_id: UUID) -> bool:
+        """
+        Каскадное удаление чата и всех связанных записей.
+        
+        Порядок удаления (из-за foreign keys):
+        1. chat_images
+        2. messages
+        3. chats
+        
+        Args:
+            chat_id: UUID чата
+        
+        Returns:
+            True если успешно
+        """
+        try:
+            chat_id_str = str(chat_id)
+            
+            # 1. Удалить chat_images
+            self.client.table("chat_images").delete().eq("chat_id", chat_id_str).execute()
+            logger.debug(f"Deleted chat_images for chat {chat_id}")
+            
+            # 2. Удалить messages
+            self.client.table("messages").delete().eq("chat_id", chat_id_str).execute()
+            logger.debug(f"Deleted messages for chat {chat_id}")
+            
+            # 3. Удалить сам чат
+            self.client.table("chats").delete().eq("id", chat_id_str).execute()
+            logger.debug(f"Deleted chat {chat_id}")
+            
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error deleting chat cascade: {e}")
+            return False
 

@@ -22,14 +22,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Жизненный цикл приложения."""
+    from app.services.deletion_service import deletion_service
+    
     logger.info("Starting AIZoomDoc Server...")
     logger.info(f"Debug mode: {settings.debug}")
     logger.info(f"CORS origins: {settings.cors_origins_list}")
     
     # Startup
+    await deletion_service.start()
+    
     yield
     
     # Shutdown
+    await deletion_service.stop()
     logger.info("Shutting down AIZoomDoc Server...")
 
 

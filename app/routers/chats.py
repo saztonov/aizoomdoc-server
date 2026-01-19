@@ -198,6 +198,57 @@ async def get_chat_history(
     )
 
 
+@router.delete("/{chat_id}", status_code=status.HTTP_202_ACCEPTED)
+async def delete_chat(
+    chat_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase: SupabaseClient = Depends()
+):
+    """
+    Удалить чат (асинхронно).
+    
+    Запускает каскадное удаление в фоновом режиме:
+    - Файлы из R2
+    - Локальные логи сервера
+    - Записи из БД (messages, chat_images, chats)
+    
+    Args:
+        chat_id: UUID чата
+        user_id: ID текущего пользователя
+        supabase: Клиент Supabase
+    
+    Returns:
+        202 Accepted - удаление запланировано
+    
+    Raises:
+        HTTPException: Если чат не найден или не принадлежит пользователю
+    """
+    from app.services.deletion_service import deletion_service
+    
+    chat = await supabase.get_chat(chat_id)
+    
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat not found"
+        )
+    
+    # Проверяем принадлежность чата пользователю
+    user = await supabase.get_user_by_id(user_id)
+    if not user or chat.user_id != user.username:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    # Запланировать удаление (неблокирующее)
+    deletion_service.schedule_deletion(chat_id)
+    
+    logger.info(f"Chat {chat_id} scheduled for deletion by user {user_id}")
+    
+    return {"message": "Deletion scheduled", "chat_id": str(chat_id)}
+
+
 @router.post("/{chat_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 async def send_message(
     chat_id: UUID,
