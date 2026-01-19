@@ -111,6 +111,9 @@ async def get_chat_history(
     """
     Получить историю чата.
     
+    Админы могут просматривать любые чаты.
+    Обычные пользователи - только свои.
+    
     Args:
         chat_id: UUID чата
         user_id: ID текущего пользователя
@@ -120,7 +123,7 @@ async def get_chat_history(
         История чата с сообщениями
     
     Raises:
-        HTTPException: Если чат не найден или не принадлежит пользователю
+        HTTPException: Если чат не найден или нет доступа
     """
     chat = await supabase.get_chat(chat_id)
     
@@ -130,9 +133,15 @@ async def get_chat_history(
             detail="Chat not found"
         )
     
-    # Проверяем принадлежность чата пользователю
+    # Проверяем права доступа: админы видят все чаты, пользователи - только свои
     user = await supabase.get_user_by_id(user_id)
-    if not user or chat.user_id != user.username:
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    if not user.is_admin and chat.user_id != user.username:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"
@@ -213,6 +222,9 @@ async def delete_chat(
     - Локальные логи сервера
     - Записи из БД (messages, chat_images, chats)
     
+    Админы могут удалять любые чаты.
+    Обычные пользователи - только свои.
+    
     Args:
         chat_id: UUID чата
         user_id: ID текущего пользователя
@@ -222,7 +234,7 @@ async def delete_chat(
         202 Accepted - удаление запланировано
     
     Raises:
-        HTTPException: Если чат не найден или не принадлежит пользователю
+        HTTPException: Если чат не найден или нет доступа
     """
     from app.services.deletion_service import deletion_service
     
@@ -234,9 +246,15 @@ async def delete_chat(
             detail="Chat not found"
         )
     
-    # Проверяем принадлежность чата пользователю
+    # Проверяем права доступа: админы могут удалять любые чаты
     user = await supabase.get_user_by_id(user_id)
-    if not user or chat.user_id != user.username:
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    if not user.is_admin and chat.user_id != user.username:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"
@@ -263,6 +281,9 @@ async def send_message(
     Note: Это создает только пользовательское сообщение.
           Обработка и ответ LLM происходят через WebSocket.
     
+    Админы могут писать в любые чаты.
+    Обычные пользователи - только в свои.
+    
     Args:
         chat_id: UUID чата
         message_data: Данные сообщения
@@ -273,7 +294,7 @@ async def send_message(
         Созданное сообщение
     
     Raises:
-        HTTPException: Если чат не найден или не принадлежит пользователю
+        HTTPException: Если чат не найден или нет доступа
     """
     chat = await supabase.get_chat(chat_id)
     
@@ -283,9 +304,15 @@ async def send_message(
             detail="Chat not found"
         )
     
-    # Проверяем принадлежность чата пользователю
+    # Проверяем права доступа: админы могут писать в любые чаты
     user = await supabase.get_user_by_id(user_id)
-    if not user or chat.user_id != user.username:
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    if not user.is_admin and chat.user_id != user.username:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"

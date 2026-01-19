@@ -351,17 +351,30 @@ class SupabaseClient:
             return None
     
     async def get_user_chats(self, user_id: UUID, limit: int = 50) -> List[Chat]:
-        """Получить чаты пользователя."""
+        """
+        Получить чаты пользователя.
+        
+        Для пользователей с ролью 'user' - только свои чаты.
+        Для пользователей с ролью 'admin' - все чаты.
+        """
         try:
             user = await self.get_user_by_id(user_id)
             if not user:
                 return []
             
-            response = (
+            query = (
                 self.client.table("chats")
                 .select("*")
-                .eq("user_id", user.username)
                 .eq("is_archived", False)
+            )
+            
+            # Для обычных пользователей показываем только их чаты
+            # Для админов - все чаты
+            if not user.is_admin:
+                query = query.eq("user_id", user.username)
+            
+            response = (
+                query
                 .order("updated_at", desc=True)
                 .limit(limit)
                 .execute()

@@ -16,8 +16,14 @@ class User(BaseModel):
     username: str
     static_token: str  # В MVP храним в открытом виде
     status: str = Field(default="active")
+    role: Literal["user", "admin"] = Field(default="user")
     created_at: datetime
     last_seen_at: Optional[datetime] = None
+    
+    @property
+    def is_admin(self) -> bool:
+        """Проверка, является ли пользователь администратором."""
+        return self.role == "admin"
 
 
 class UserWithSettings(BaseModel):
