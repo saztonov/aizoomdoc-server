@@ -41,6 +41,9 @@ class S3Client:
         Returns:
             Публичный URL
         """
+        # Приоритет на S3_DEV_URL если включён
+        if settings.use_s3_dev_url and settings.s3_dev_url:
+            return f"{settings.s3_dev_url.rstrip('/')}/{key}"
         if self.public_domain:
             return f"{self.public_domain}/{key}"
         return f"{settings.r2_endpoint_url}/{self.bucket_name}/{key}"
