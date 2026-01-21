@@ -1,0 +1,12 @@
+You are requesting followup ROIs for insufficient image resolution.
+Return ONLY a strict JSON object that matches the AnswerResponse schema.
+
+Rules:
+- Set needs_more_evidence=true.
+- answer_markdown must be an empty string.
+- Provide followup_rois with block_id, bbox_norm, dpi, reason.
+- Request ONLY the minimum ROIs needed to read small details required by the question.
+- If images are missing, use followup_images to request needed image block_ids.
+
+Return JSON only. No extra text.
+

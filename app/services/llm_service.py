@@ -18,7 +18,12 @@ except ImportError:
 from app.config import settings
 from app.db.supabase_client import SupabaseClient
 from app.models.internal import UserWithSettings
-from app.models.llm_schemas import get_flash_collector_schema, get_answer_schema
+from app.models.llm_schemas import (
+    get_flash_collector_schema,
+    get_answer_schema,
+    get_analysis_intent_schema,
+    get_document_facts_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -337,6 +342,50 @@ class LLMService:
             user_message=user_message,
             google_file_uris=google_file_uris,
             response_schema=get_answer_schema(),
+            model_name=model_name,
+        )
+        parsed = self.parse_json(text)
+        if return_text:
+            return parsed, text
+        return parsed
+
+    async def run_analysis_intent(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        google_file_uris: Optional[Iterable[Union[dict, str]]] = None,
+        model_name: Optional[str] = None,
+        return_text: bool = False,
+    ) -> Union[dict, tuple[dict, str]]:
+        """Run intent classification with strict JSON schema."""
+        text = await self.generate_json_response(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            google_file_uris=google_file_uris,
+            response_schema=get_analysis_intent_schema(),
+            model_name=model_name,
+        )
+        parsed = self.parse_json(text)
+        if return_text:
+            return parsed, text
+        return parsed
+
+    async def run_document_extract(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        google_file_uris: Optional[Iterable[Union[dict, str]]] = None,
+        model_name: Optional[str] = None,
+        return_text: bool = False,
+    ) -> Union[dict, tuple[dict, str]]:
+        """Run document extraction with strict JSON schema."""
+        text = await self.generate_json_response(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            google_file_uris=google_file_uris,
+            response_schema=get_document_facts_schema(),
             model_name=model_name,
         )
         parsed = self.parse_json(text)

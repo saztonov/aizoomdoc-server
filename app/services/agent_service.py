@@ -26,6 +26,8 @@ from app.models.llm_schemas import (
     ROIRequest,
     MaterialsJSON,
     MaterialImage,
+    AnalysisIntent,
+    DocumentFacts,
 )
 from app.db.supabase_client import SupabaseClient
 from app.db.supabase_projects_client import SupabaseProjectsClient
@@ -35,6 +37,7 @@ from app.services.llm_logger import LLMDialogLogger
 from app.services.search_service import SearchService
 from app.services.evidence_service import EvidenceService
 from app.services.html_ocr_service import HtmlOcrService
+from app.services.document_extract_service import DocumentExtractService
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,7 @@ class AgentService:
         self.llm_service = create_llm_service(user)
         self.search_service = SearchService(projects_db, s3_client)
         self.evidence_service = EvidenceService()
+        self.document_extract_service = DocumentExtractService(self.llm_service)
     
     async def process_message(
         self,
@@ -336,12 +340,128 @@ class AgentService:
             return "NOTE: HTML OCR file is attached via Google File API. Use its content as the main text source."
         return ""
 
-    def _format_materials_prompt(self, materials_json: dict, user_message: str) -> str:
+    def _format_materials_prompt(
+        self,
+        materials_json: dict,
+        user_message: str,
+        analysis_intent: Optional[AnalysisIntent] = None,
+    ) -> str:
+        intent_block = ""
+        if analysis_intent:
+            intent_block = (
+                "ANALYSIS_INTENT:\n"
+                f"{json.dumps(analysis_intent.model_dump(), ensure_ascii=False)}\n\n"
+            )
         return (
+            f"{intent_block}"
             "MATERIALS_JSON:\n"
             f"{json.dumps(materials_json, ensure_ascii=False)}\n\n"
             f"USER QUESTION:\n{user_message}"
         )
+
+    def _format_intent_note(self, analysis_intent: Optional[AnalysisIntent]) -> str:
+        if not analysis_intent:
+            return ""
+        return (
+            "ANALYSIS_INTENT:\n"
+            f"{json.dumps(analysis_intent.model_dump(), ensure_ascii=False)}"
+        )
+
+    def _should_force_roi_followup(
+        self,
+        answer: AnswerResponse,
+        analysis_intent: Optional[AnalysisIntent],
+    ) -> bool:
+        if not analysis_intent or not analysis_intent.requires_visual_detail:
+            return False
+        if answer.followup_rois or answer.followup_images:
+            return False
+        return not any(c.kind == "roi" for c in answer.citations)
+
+    async def _classify_intent(
+        self,
+        *,
+        user_message: str,
+        context_text: str,
+        google_file_uris: Optional[List[str]] = None,
+        llm_logger: Optional[LLMDialogLogger] = None,
+    ) -> AnalysisIntent:
+        intent_prompt = load_prompt("analysis_router_prompt")
+        if not intent_prompt:
+            return AnalysisIntent()
+        context_snippet = (context_text or "").strip()
+        if len(context_snippet) > 1200:
+            context_snippet = context_snippet[:1200]
+        user_prompt = f"USER QUESTION:\n{user_message}"
+        if context_snippet:
+            user_prompt = f"CONTEXT_SNIPPET:\n{context_snippet}\n\n{user_prompt}"
+        if llm_logger:
+            llm_logger.log_request(
+                phase="intent_router",
+                model=settings.default_flash_model or settings.default_model,
+                system_prompt=intent_prompt,
+                user_prompt=user_prompt,
+                google_files=google_file_uris or [],
+            )
+        try:
+            intent_dict, raw_text = await self.llm_service.run_analysis_intent(
+                system_prompt=intent_prompt,
+                user_message=user_prompt,
+                google_file_uris=google_file_uris,
+                model_name=settings.default_flash_model or settings.default_model,
+                return_text=True,
+            )
+            if llm_logger:
+                llm_logger.log_response(phase="intent_router", response_text=raw_text)
+            return AnalysisIntent.model_validate(intent_dict)
+        except Exception as exc:
+            logger.warning(f"Intent router failed: {exc}")
+            return AnalysisIntent()
+
+    def _suggest_followup_images(self, materials_json: dict, limit: int = 3) -> List[str]:
+        """Suggest image block ids for followup when no images are available."""
+        try:
+            materials = MaterialsJSON.model_validate(materials_json)
+        except Exception:
+            return []
+        existing = {img.block_id for img in materials.images}
+        candidates = [b.block_id for b in materials.blocks if b.block_kind == "IMAGE"]
+        return [bid for bid in candidates if bid not in existing][:limit]
+
+    async def _request_roi_followup(
+        self,
+        *,
+        materials_json: dict,
+        user_message: str,
+        analysis_intent: Optional[AnalysisIntent],
+        google_files: Optional[List[dict]],
+        llm_logger: Optional[LLMDialogLogger],
+    ) -> Optional[AnswerResponse]:
+        roi_prompt = load_prompt("roi_request_prompt")
+        if not roi_prompt:
+            return None
+        user_prompt = self._format_materials_prompt(materials_json, user_message, analysis_intent)
+        if llm_logger:
+            llm_logger.log_request(
+                phase="roi_request",
+                model=settings.default_pro_model or settings.default_model,
+                system_prompt=roi_prompt,
+                user_prompt=user_prompt,
+                google_files=google_files or [],
+            )
+        answer_dict, raw_text = await self.llm_service.run_answer(
+            system_prompt=roi_prompt,
+            user_message=user_prompt,
+            google_file_uris=google_files if google_files else None,
+            model_name=settings.default_pro_model or settings.default_model,
+            return_text=True,
+        )
+        if llm_logger:
+            llm_logger.log_response(phase="roi_request", response_text=raw_text)
+        try:
+            return AnswerResponse.model_validate(answer_dict)
+        except Exception:
+            return None
 
     def _apply_coverage_check(
         self,
@@ -403,6 +523,7 @@ class AgentService:
         requested_images: List[ImageRequest],
         requested_rois: List[ROIRequest],
         block_map: Dict[str, Any],
+        extracted_facts: Optional[DocumentFacts] = None,
         existing_materials: Optional[dict] = None,
         llm_logger: Optional[LLMDialogLogger] = None,
         html_crop_map: Optional[Dict[str, str]] = None,
@@ -425,6 +546,7 @@ class AgentService:
         materials_images: List[MaterialImage] = []
         google_files: List[dict] = []
         seen_keys: set[tuple] = set()
+        existing_facts: Optional[DocumentFacts] = None
         if existing_materials:
             try:
                 existing = MaterialsJSON.model_validate(existing_materials)
@@ -432,6 +554,7 @@ class AgentService:
                     key = (img.block_id, img.kind, tuple(img.bbox_norm) if img.bbox_norm else None)
                     seen_keys.add(key)
                     google_files.append({"uri": img.png_uri, "mime_type": "image/png"})
+                existing_facts = existing.extracted_facts
             except Exception:
                 pass
 
@@ -586,11 +709,16 @@ class AgentService:
             existing = MaterialsJSON.model_validate(existing_materials)
             materials_images = existing.images + materials_images
             blocks_by_id = {b.block_id: b for b in existing.blocks} | blocks_by_id
+            if extracted_facts is None:
+                extracted_facts = existing.extracted_facts
+        if extracted_facts is None and existing_facts is not None:
+            extracted_facts = existing_facts
 
         materials = MaterialsJSON(
             blocks=list(blocks_by_id.values()),
             images=materials_images,
             source_documents=[str(doc_id) for doc_id in document_ids],
+            extracted_facts=extracted_facts,
         )
         return materials.model_dump(), google_files
     
@@ -617,6 +745,16 @@ class AgentService:
         html_crop_map = await self._build_html_crop_map(google_file_uris)
         if llm_logger and html_crop_map:
             llm_logger.log_section("HTML_CROP_MAP_SIZE", {"count": len(html_crop_map)})
+
+        analysis_intent = await self._classify_intent(
+            user_message=user_message,
+            context_text=context_text,
+            google_file_uris=google_file_uris,
+            llm_logger=llm_logger,
+        )
+        if llm_logger:
+            llm_logger.log_section("ANALYSIS_INTENT", analysis_intent.model_dump())
+        intent_note = self._format_intent_note(analysis_intent)
         block_map: Dict[str, Any] = {}
         for payload in payloads:
             block_map.update(payload.get("block_map", {}))
@@ -1119,6 +1257,16 @@ class AgentService:
         if llm_logger and html_crop_map:
             llm_logger.log_section("HTML_CROP_MAP_SIZE", {"count": len(html_crop_map)})
 
+        analysis_intent = await self._classify_intent(
+            user_message=user_message,
+            context_text=context_text,
+            google_file_uris=google_file_uris,
+            llm_logger=llm_logger,
+        )
+        if llm_logger:
+            llm_logger.log_section("ANALYSIS_INTENT", analysis_intent.model_dump())
+        intent_note = self._format_intent_note(analysis_intent)
+
         # Этап 1: Flash collector по каждому документу
         yield self._create_phase_event("flash_stage", "Flash собирает контекст...")
 
@@ -1130,7 +1278,8 @@ class AgentService:
         if payloads:
             for payload in payloads:
                 full_text = payload.get("full_text") or ""
-                user_prompt = f"{full_text}\n\n{html_note}\n\nUSER QUESTION:\n{user_message}"
+                prompt_parts = [full_text, html_note, intent_note, f"USER QUESTION:\n{user_message}"]
+                user_prompt = "\n\n".join(p for p in prompt_parts if p)
                 if llm_logger:
                     llm_logger.log_request(
                         phase=f"flash_collect_{payload.get('doc_id')}",
@@ -1173,7 +1322,8 @@ class AgentService:
                 combined_rois.extend(flash_resp.requested_rois)
         else:
             # Fallback: use provided context_text
-            user_prompt = f"{context_text}\n\n{html_note}\n\nUSER QUESTION:\n{user_message}"
+            prompt_parts = [context_text, html_note, intent_note, f"USER QUESTION:\n{user_message}"]
+            user_prompt = "\n\n".join(p for p in prompt_parts if p)
             if llm_logger:
                 llm_logger.log_request(
                     phase="flash_collect_fallback",
@@ -1198,6 +1348,18 @@ class AgentService:
 
         yield self._create_progress_event("flash_stage", 1.0, "Контекст собран")
 
+        extracted_facts: Optional[DocumentFacts] = None
+        doc_extract_prompt = load_prompt("document_extract_prompt")
+        if doc_extract_prompt:
+            extracted_facts = await self.document_extract_service.extract_facts(
+                system_prompt=doc_extract_prompt,
+                user_message=user_message,
+                selected_blocks=combined_blocks,
+                analysis_intent=analysis_intent,
+            )
+            if llm_logger:
+                llm_logger.log_section("DOCUMENT_FACTS", extracted_facts.model_dump())
+
         # Этап 2: подготовка материалов (PNG-only)
         yield self._create_phase_event("tool_execution", "Подготовка PNG изображений...")
         materials_json, google_files = await self._build_materials(
@@ -1206,6 +1368,7 @@ class AgentService:
             requested_images=combined_images,
             requested_rois=combined_rois,
             block_map=block_map,
+            extracted_facts=extracted_facts,
             llm_logger=llm_logger,
             html_crop_map=html_crop_map,
             chat_id=chat_id,
@@ -1230,7 +1393,7 @@ class AgentService:
 
         while iteration < max_iterations:
             iteration += 1
-            user_prompt = self._format_materials_prompt(materials_json, user_message)
+            user_prompt = self._format_materials_prompt(materials_json, user_message, analysis_intent)
             if llm_logger:
                 llm_logger.log_request(
                     phase=f"pro_answer_{iteration}",
@@ -1249,6 +1412,44 @@ class AgentService:
             if llm_logger:
                 llm_logger.log_response(phase=f"pro_answer_{iteration}", response_text=raw_text)
             answer = AnswerResponse.model_validate(answer_dict)
+
+            if self._should_force_roi_followup(answer, analysis_intent):
+                followup_images = []
+                if not materials_json.get("images"):
+                    followup_images = self._suggest_followup_images(materials_json)
+                if followup_images:
+                    answer.followup_images = followup_images
+                    answer.needs_more_evidence = True
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "QUALITY_GATE",
+                            {
+                                "action": "followup_images",
+                                "reason": "requires_visual_detail_without_evidence",
+                                "followup_images": followup_images,
+                            },
+                        )
+                else:
+                    roi_answer = await self._request_roi_followup(
+                        materials_json=materials_json,
+                        user_message=user_message,
+                        analysis_intent=analysis_intent,
+                        google_files=google_files,
+                        llm_logger=llm_logger,
+                    )
+                    if roi_answer:
+                        answer = roi_answer
+                        if llm_logger:
+                            llm_logger.log_section(
+                                "QUALITY_GATE",
+                                {
+                                    "action": "followup_rois",
+                                    "reason": "requires_visual_detail_without_evidence",
+                                    "followup_rois": [r.model_dump() for r in answer.followup_rois],
+                                },
+                            )
+                    else:
+                        answer.needs_more_evidence = True
 
             if answer.followup_images or answer.followup_rois:
                 if llm_logger:
@@ -1291,6 +1492,7 @@ class AgentService:
                     requested_images=image_reqs,
                     requested_rois=roi_reqs,
                     block_map=block_map,
+                    extracted_facts=extracted_facts,
                     existing_materials=materials_json,
                     llm_logger=llm_logger,
                     html_crop_map=html_crop_map,

@@ -57,6 +57,30 @@ class FlashCollectorResponse(LLMBaseModel):
     materials_summary: Optional[str] = Field(default=None)
 
 
+class AnalysisIntent(LLMBaseModel):
+    """Intent classification for guiding analysis focus."""
+
+    intent_type: Literal["general_analysis", "element_count", "mixed", "comparison", "unknown"] = Field(
+        default="general_analysis",
+        description="Primary intent classification",
+    )
+    requires_visual_detail: bool = Field(
+        default=False,
+        description="Whether accurate answer requires reading small graphical details",
+    )
+    focus_areas: List[str] = Field(
+        default_factory=list,
+        description="High-level focus areas to prioritize in analysis",
+    )
+    confidence: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Classifier confidence",
+    )
+    rationale: Optional[str] = Field(default=None, description="Short rationale for classification")
+
+
 class MaterialImage(LLMBaseModel):
     """Image entry in materials_json."""
 
@@ -70,6 +94,43 @@ class MaterialImage(LLMBaseModel):
     bbox_norm: Optional[BBoxNorm] = Field(default=None, description="ROI/quadrant bbox")
 
 
+class ExtractedTable(LLMBaseModel):
+    """Structured table extracted from OCR text."""
+
+    title: Optional[str] = Field(default=None, description="Table title if available")
+    headers: List[str] = Field(default_factory=list, description="Table headers")
+    rows: List[List[str]] = Field(default_factory=list, description="Table rows as strings")
+    source_block_id: Optional[str] = Field(default=None, description="Source block id")
+
+
+class ExtractedFact(LLMBaseModel):
+    """Generic extracted fact from technical documentation."""
+
+    category: Literal[
+        "decision",
+        "requirement",
+        "constraint",
+        "parameter",
+        "material",
+        "equipment",
+        "risk",
+        "note",
+        "assumption",
+        "other",
+    ] = Field(default="other", description="Fact category")
+    text: str = Field(..., description="Fact statement")
+    source_block_ids: List[str] = Field(default_factory=list, description="Supporting block ids")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Confidence")
+
+
+class DocumentFacts(LLMBaseModel):
+    """Structured facts extracted from selected blocks."""
+
+    summary: Optional[str] = Field(default=None, description="Short factual summary")
+    facts: List[ExtractedFact] = Field(default_factory=list)
+    tables: List[ExtractedTable] = Field(default_factory=list)
+
+
 class MaterialsJSON(LLMBaseModel):
     """Materials for answer (sent to Pro or Flash-answer)."""
 
@@ -77,6 +138,9 @@ class MaterialsJSON(LLMBaseModel):
     images: List[MaterialImage] = Field(default_factory=list)
     source_documents: Optional[List[str]] = Field(
         default=None, description="Source document IDs or names"
+    )
+    extracted_facts: Optional[DocumentFacts] = Field(
+        default=None, description="Structured facts extracted from text/table blocks"
     )
 
 
@@ -132,6 +196,16 @@ class AnswerResponse(LLMBaseModel):
 def get_flash_collector_schema() -> dict:
     """JSON schema for FlashCollectorResponse."""
     return FlashCollectorResponse.model_json_schema()
+
+
+def get_analysis_intent_schema() -> dict:
+    """JSON schema for AnalysisIntent."""
+    return AnalysisIntent.model_json_schema()
+
+
+def get_document_facts_schema() -> dict:
+    """JSON schema for DocumentFacts."""
+    return DocumentFacts.model_json_schema()
 
 
 def get_answer_schema() -> dict:

@@ -79,6 +79,8 @@
 - **File Service** — загрузка и обработка файлов
 - **Image Service** — OCR, zoom, crop
 - **Agent Service** — оркестрация пайплайна
+- **Document Extract Service** — универсальное извлечение фактов и таблиц
+- **Quality Gate** — проверка достаточности доказательств и триггер followup
 
 ### Уровень данных (Database & Storage)
 - **Supabase** (основная БД) — пользователи, чаты, промпты, настройки
@@ -124,6 +126,7 @@ aizoomdoc-server/
 │       ├── search_service.py   # Поиск в документах
 │       ├── image_service.py    # OCR, zoom, квадранты
 │       ├── agent_service.py    # Оркестрация пайплайна
+│       ├── document_extract_service.py # Извлечение фактов/таблиц
 │       ├── queue_service.py    # Управление очередью запросов
 │       ├── deletion_service.py # Background удаление файлов
 │       ├── html_ocr_service.py # HTML парсинг для OCR
@@ -135,13 +138,16 @@ aizoomdoc-server/
 │   └── 002_add_user_roles.sql
 │
 ├── data/                        # Данные приложения
-│   └── prompts/                # Системные промпты
+│   └── promts/                 # Системные промпты
 │       ├── llm_system_prompt.txt
 │       ├── flash_answer_prompt.txt
 │       ├── pro_answer_prompt.txt
 │       ├── flash_extractor_prompt.txt
 │       ├── html_ocr_prompt.txt
 │       └── json_annotation_prompt.txt
+│       ├── analysis_router_prompt.txt
+│       ├── document_extract_prompt.txt
+│       └── roi_request_prompt.txt
 │
 ├── requirements.txt             # Python зависимости
 ├── env.example                 # Пример конфигурации
