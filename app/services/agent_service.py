@@ -367,6 +367,17 @@ class AgentService:
             f"{json.dumps(analysis_intent.model_dump(), ensure_ascii=False)}"
         )
 
+    def _merge_google_files(self, base: List[dict], extra: List[dict]) -> List[dict]:
+        """Merge google file entries by uri, preserving order."""
+        seen = {item.get("uri") for item in base if isinstance(item, dict)}
+        merged = list(base)
+        for item in extra:
+            uri = item.get("uri") if isinstance(item, dict) else None
+            if uri and uri not in seen:
+                merged.append(item)
+                seen.add(uri)
+        return merged
+
     def _should_force_roi_followup(
         self,
         answer: AnswerResponse,
@@ -436,6 +447,7 @@ class AgentService:
         analysis_intent: Optional[AnalysisIntent],
         google_files: Optional[List[dict]],
         llm_logger: Optional[LLMDialogLogger],
+        model_name: Optional[str] = None,
     ) -> Optional[AnswerResponse]:
         roi_prompt = load_prompt("roi_request_prompt")
         if not roi_prompt:
@@ -453,7 +465,7 @@ class AgentService:
             system_prompt=roi_prompt,
             user_message=user_prompt,
             google_file_uris=google_files if google_files else None,
-            model_name=settings.default_pro_model or settings.default_model,
+            model_name=model_name or settings.default_pro_model or settings.default_model,
             return_text=True,
         )
         if llm_logger:
@@ -759,17 +771,60 @@ class AgentService:
         for payload in payloads:
             block_map.update(payload.get("block_map", {}))
 
+        combined_blocks: List[SelectedBlock] = []
+        for payload in payloads:
+            for block in payload.get("blocks", []):
+                combined_blocks.append(
+                    SelectedBlock(
+                        block_id=block.block_id,
+                        block_kind=block.block_kind,
+                        page_number=max(1, block.page_number),
+                        content_raw=block.content_raw,
+                        linked_block_ids=block.linked_block_ids,
+                    )
+                )
+
         max_iterations = 5
         iteration = 0
         materials_json: Optional[dict] = None
         google_files: List[dict] = list(google_file_uris) if google_file_uris else []
         final_answer: Optional[AnswerResponse] = None
 
+        extracted_facts: Optional[DocumentFacts] = None
+        doc_extract_prompt = load_prompt("document_extract_prompt")
+        if doc_extract_prompt and combined_blocks:
+            extracted_facts = await self.document_extract_service.extract_facts(
+                system_prompt=doc_extract_prompt,
+                user_message=user_message,
+                selected_blocks=combined_blocks,
+                analysis_intent=analysis_intent,
+                model_name=settings.default_flash_model or settings.default_model,
+            )
+            if llm_logger:
+                llm_logger.log_section("DOCUMENT_FACTS", extracted_facts.model_dump())
+
+        if combined_blocks:
+            materials_json, material_files = await self._build_materials(
+                document_ids=document_ids or [],
+                selected_blocks=combined_blocks,
+                requested_images=[],
+                requested_rois=[],
+                block_map=block_map,
+                extracted_facts=extracted_facts,
+                llm_logger=llm_logger,
+                html_crop_map=html_crop_map,
+                chat_id=chat_id,
+            )
+            google_files = self._merge_google_files(google_files, material_files)
+
         while iteration < max_iterations:
             iteration += 1
             logger.info(f"Flash-only iteration {iteration}")
             if materials_json:
-                user_prompt = f"{full_context}\n\n{html_note}\n\n{self._format_materials_prompt(materials_json, user_message)}"
+                user_prompt = (
+                    f"{full_context}\n\n{html_note}\n\n"
+                    f"{self._format_materials_prompt(materials_json, user_message, analysis_intent)}"
+                )
             else:
                 user_prompt = f"{full_context}\n\n{html_note}\n\nUSER QUESTION:\n{user_message}"
 
@@ -798,6 +853,45 @@ class AgentService:
                 if llm_logger:
                     llm_logger.log_section("VALIDATION_ERROR", str(e))
                 raise
+
+            if self._should_force_roi_followup(answer, analysis_intent):
+                followup_images = []
+                if materials_json and not materials_json.get("images"):
+                    followup_images = self._suggest_followup_images(materials_json)
+                if followup_images:
+                    answer.followup_images = followup_images
+                    answer.needs_more_evidence = True
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "QUALITY_GATE",
+                            {
+                                "action": "followup_images",
+                                "reason": "requires_visual_detail_without_evidence",
+                                "followup_images": followup_images,
+                            },
+                        )
+                else:
+                    roi_answer = await self._request_roi_followup(
+                        materials_json=materials_json or {},
+                        user_message=user_message,
+                        analysis_intent=analysis_intent,
+                        google_files=google_files,
+                        llm_logger=llm_logger,
+                        model_name=settings.default_flash_model or settings.default_model,
+                    )
+                    if roi_answer:
+                        answer = roi_answer
+                        if llm_logger:
+                            llm_logger.log_section(
+                                "QUALITY_GATE",
+                                {
+                                    "action": "followup_rois",
+                                    "reason": "requires_visual_detail_without_evidence",
+                                    "followup_rois": [r.model_dump() for r in answer.followup_rois],
+                                },
+                            )
+                    else:
+                        answer.needs_more_evidence = True
 
             if answer.followup_images or answer.followup_rois:
                 if llm_logger:
@@ -838,17 +932,19 @@ class AgentService:
                     timestamp=datetime.utcnow()
                 )
 
-                materials_json, google_files = await self._build_materials(
+                materials_json, material_files = await self._build_materials(
                     document_ids=document_ids or [],
                     selected_blocks=[],
                     requested_images=image_reqs,
                     requested_rois=roi_reqs,
                     block_map=block_map,
+                    extracted_facts=extracted_facts,
                     existing_materials=materials_json,
                     llm_logger=llm_logger,
                     html_crop_map=html_crop_map,
                     chat_id=chat_id,
                 )
+                google_files = self._merge_google_files(google_files, material_files)
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
                 
@@ -904,6 +1000,16 @@ class AgentService:
         payloads_a = await self._build_document_payloads(document_ids_a)
         payloads_b = await self._build_document_payloads(document_ids_b)
 
+        compare_context = self._combine_document_texts(payloads_a + payloads_b)
+        analysis_intent = await self._classify_intent(
+            user_message=user_message,
+            context_text=compare_context,
+            llm_logger=llm_logger,
+        )
+        if llm_logger:
+            llm_logger.log_section("ANALYSIS_INTENT", analysis_intent.model_dump())
+        intent_note = self._format_intent_note(analysis_intent)
+
         yield self._create_phase_event("flash_stage", "Flash собирает контекст для сравнения...")
 
         combined_blocks: List[SelectedBlock] = []
@@ -924,7 +1030,8 @@ class AgentService:
         async def collect(payloads: List[Dict[str, Any]], label_prefix: str) -> None:
             for payload in payloads:
                 full_text = payload.get("full_text") or ""
-                user_prompt = f"{full_text}\n\nUSER QUESTION:\n{user_message}"
+                prompt_parts = [full_text, intent_note, f"USER QUESTION:\n{user_message}"]
+                user_prompt = "\n\n".join(p for p in prompt_parts if p)
                 if llm_logger:
                     llm_logger.log_request(
                         phase=f"flash_collect_{label_prefix}_{payload.get('doc_id')}",
@@ -980,6 +1087,19 @@ class AgentService:
 
         yield self._create_progress_event("flash_stage", 1.0, "Контекст собран")
 
+        extracted_facts: Optional[DocumentFacts] = None
+        doc_extract_prompt = load_prompt("document_extract_prompt")
+        if doc_extract_prompt and combined_blocks:
+            extracted_facts = await self.document_extract_service.extract_facts(
+                system_prompt=doc_extract_prompt,
+                user_message=user_message,
+                selected_blocks=combined_blocks,
+                analysis_intent=analysis_intent,
+                model_name=settings.default_pro_model or settings.default_model,
+            )
+            if llm_logger:
+                llm_logger.log_section("DOCUMENT_FACTS", extracted_facts.model_dump())
+
         # Prepare materials
         yield self._create_phase_event("tool_execution", "Подготовка PNG изображений...")
         combined_doc_ids = document_ids_a + document_ids_b
@@ -989,6 +1109,7 @@ class AgentService:
             requested_images=combined_images,
             requested_rois=combined_rois,
             block_map=block_map,
+            extracted_facts=extracted_facts,
             llm_logger=llm_logger,
             chat_id=chat_id,
         )
@@ -1008,7 +1129,7 @@ class AgentService:
         while iteration < max_iterations:
             iteration += 1
             compare_question = f"Compare DOC_A vs DOC_B. {user_message}"
-            user_prompt = self._format_materials_prompt(materials_json, compare_question)
+            user_prompt = self._format_materials_prompt(materials_json, compare_question, analysis_intent)
             if llm_logger:
                 llm_logger.log_request(
                     phase=f"compare_pro_answer_{iteration}",
@@ -1027,6 +1148,45 @@ class AgentService:
             if llm_logger:
                 llm_logger.log_response(phase=f"compare_pro_answer_{iteration}", response_text=raw_text)
             answer = AnswerResponse.model_validate(answer_dict)
+
+            if self._should_force_roi_followup(answer, analysis_intent):
+                followup_images = []
+                if not materials_json.get("images"):
+                    followup_images = self._suggest_followup_images(materials_json)
+                if followup_images:
+                    answer.followup_images = followup_images
+                    answer.needs_more_evidence = True
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "QUALITY_GATE",
+                            {
+                                "action": "followup_images",
+                                "reason": "requires_visual_detail_without_evidence",
+                                "followup_images": followup_images,
+                            },
+                        )
+                else:
+                    roi_answer = await self._request_roi_followup(
+                        materials_json=materials_json,
+                        user_message=compare_question,
+                        analysis_intent=analysis_intent,
+                        google_files=google_files,
+                        llm_logger=llm_logger,
+                        model_name=settings.default_pro_model or settings.default_model,
+                    )
+                    if roi_answer:
+                        answer = roi_answer
+                        if llm_logger:
+                            llm_logger.log_section(
+                                "QUALITY_GATE",
+                                {
+                                    "action": "followup_rois",
+                                    "reason": "requires_visual_detail_without_evidence",
+                                    "followup_rois": [r.model_dump() for r in answer.followup_rois],
+                                },
+                            )
+                    else:
+                        answer.needs_more_evidence = True
 
             if answer.followup_images or answer.followup_rois:
                 if llm_logger:
@@ -1047,6 +1207,7 @@ class AgentService:
                     requested_images=image_reqs,
                     requested_rois=roi_reqs,
                     block_map=block_map,
+                    extracted_facts=extracted_facts,
                     existing_materials=materials_json,
                     llm_logger=llm_logger,
                     chat_id=chat_id,
@@ -1356,6 +1517,7 @@ class AgentService:
                 user_message=user_message,
                 selected_blocks=combined_blocks,
                 analysis_intent=analysis_intent,
+                model_name=settings.default_pro_model or settings.default_model,
             )
             if llm_logger:
                 llm_logger.log_section("DOCUMENT_FACTS", extracted_facts.model_dump())
@@ -1436,6 +1598,7 @@ class AgentService:
                         analysis_intent=analysis_intent,
                         google_files=google_files,
                         llm_logger=llm_logger,
+                        model_name=settings.default_pro_model or settings.default_model,
                     )
                     if roi_answer:
                         answer = roi_answer

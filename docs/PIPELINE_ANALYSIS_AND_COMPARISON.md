@@ -111,16 +111,17 @@
 
 Что совпадает с complex:
 - Есть **Intent Router** (`_classify_intent`) и лог `ANALYSIS_INTENT`.
-- Есть followup-цикл на `followup_images`/`followup_rois` (запросы могут приходить от Flash‑ответа).
+- Есть **DocumentExtractService**: `extracted_facts` добавляются в `materials_json`.
+- Есть followup-цикл на `followup_images`/`followup_rois`.
+- Применяется **Quality Gate**: при `requires_visual_detail` и отсутствии ROI → принудительный followup.
 - Используется тот же `MaterialsJSON` и тот же рендер изображений через `_build_materials`.
 
 Что отличается (важно):
-- **Нет Flash‑collector** как отдельного этапа сборки материалов. В simple режиме модель отвечает сразу (flash_answer / llm_system_prompt), а не “сначала собирает, потом отвечает”.
-- **Нет `DocumentExtractService`**: `extracted_facts` в `materials_json` в simple‑режиме не формируются.
-- **Нет принудительного Quality Gate**, который требует ROI при `requires_visual_detail`. В simple‑режиме ROI-обязательность достигается только инструкциями промпта и “самодисциплиной” модели.
-- В followup-итерации simple режима `_build_materials` вызывается с `selected_blocks=[]`, то есть followup добавляет только изображения/ROI, но не расширяет текстовый контекст.
+- **Нет Flash‑collector** как отдельного этапа сборки материалов. В simple режиме LLM отвечает напрямую (flash_answer / llm_system_prompt), без “двухэтапного” сбора.
+- **Контекст шире/сырее**: материалы собираются из всех блоков документов (без Flash‑фильтрации), что может увеличить шум.
+- В followup-итерации `_build_materials` вызывается с `selected_blocks=[]`, то есть followup добавляет только изображения/ROI, не расширяя текстовые блоки.
 
-Вывод: **FLASH режим сейчас проще и менее “жёсткий” по доказательствам**, чем FLASH+PRO.
+Вывод: **FLASH режим теперь сопоставим по строгости доказательств**, но всё ещё проще по структуре (без Flash‑collector).
 
 ---
 
@@ -136,13 +137,11 @@
 - Собирает `materials_json` и вызывает Pro с вопросом вида `Compare DOC_A vs DOC_B. ...`.
 - Имеет followup-цикл по `followup_images/followup_rois`.
 
-Что отличается от complex (последних изменений там нет):
-- **Intent Router в compare-mode сейчас не используется** (вопрос сравнения формируется вручную, intent не классифицируется).
-- **DocumentExtractService не используется**: нет `extracted_facts` для compare.
-- **Quality Gate с принудительным ROI не применяется** в compare-mode (только то, что попросит модель).
-- Вызов `_format_materials_prompt()` в compare-mode не передаёт `analysis_intent`.
+Что отличается от complex:
+- Здесь **есть** intent‑router, извлечение фактов и quality‑gate (как в complex), но вопрос сравнения формируется с префиксом `Compare DOC_A vs DOC_B.`.
+- Блоки обоих документов помечаются `[DOC_A]` и `[DOC_B]`, что влияет на extract и финальные выводы.
 
-Вывод: **режим сравнения функционально ближе к “старому” flash+pro**, без новых слоёв intent/extract/gate.
+Вывод: **compare‑mode теперь выровнен по качеству и строгой проверке доказательств**, с сохранением специфики “меток” источника.
 
 ---
 
@@ -150,13 +149,13 @@
 
 | Возможность / слой | FLASH (simple) | FLASH+PRO (complex) | Compare (A vs B) |
 |---|---:|---:|---:|
-| Intent Router (`analysis_router_prompt`) | частично (классифицируется, но слабее используется) | да (используется в Flash/Pro) | нет |
+| Intent Router (`analysis_router_prompt`) | да | да | да |
 | Flash‑collector (сбор материалов до ответа) | нет | да | да |
-| DocumentExtractService (`document_extract_prompt`) | нет | да | нет |
-| `materials_json.extracted_facts` | нет | да | нет |
+| DocumentExtractService (`document_extract_prompt`) | да | да | да |
+| `materials_json.extracted_facts` | да | да | да |
 | Followup loop (images/rois) | да | да | да |
-| Quality Gate: принудительный ROI при `requires_visual_detail` | нет | да | нет |
-| Политика “не гадать без ROI” | на уровне промпта | промпт + кодовая принудиловка | на уровне промпта |
+| Quality Gate: принудительный ROI при `requires_visual_detail` | да | да | да |
+| Политика “не гадать без ROI” | промпт + кодовая принудиловка | промпт + кодовая принудиловка | промпт + кодовая принудиловка |
 
 ---
 
@@ -168,10 +167,8 @@
 
 ## 8) Рекомендации по выравниванию режимов (если нужно)
 
-Если вы хотите, чтобы одинаковая “строгость доказательств” работала везде:
-1) Вынести intent/extract/gate в общий слой и подключить к:
-   - `_process_simple_mode`,
-   - `_process_compare_mode`.
-2) Для compare-mode отдельно: извлекать `DocumentFacts` по DOC_A и DOC_B раздельно (или с метками источника) и передавать в Pro как структурированный контекст сравнения.
+Если потребуется усилить сравнение:
+1) Делать **раздельное извлечение** фактов для DOC_A и DOC_B (вместо общего списка), чтобы риски/решения не смешивались.
+2) Ввести отдельную секцию в `answer_markdown` для различий и единый блок “что совпадает”.
 
 

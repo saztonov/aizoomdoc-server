@@ -26,6 +26,7 @@ class DocumentExtractService:
         user_message: str,
         selected_blocks: List[SelectedBlock],
         analysis_intent: Optional[AnalysisIntent] = None,
+        model_name: Optional[str] = None,
         max_chars: int = 18000,
     ) -> DocumentFacts:
         """
@@ -57,6 +58,7 @@ class DocumentExtractService:
                 system_prompt=system_prompt,
                 user_message=extraction_prompt,
                 response_schema=get_document_facts_schema(),
+                model_name=model_name,
             )
             parsed = self.llm_service.parse_json(text)
             return DocumentFacts.model_validate(parsed)
