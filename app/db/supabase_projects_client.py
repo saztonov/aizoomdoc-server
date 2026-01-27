@@ -210,4 +210,69 @@ class SupabaseProjectsClient:
             logger.error(f"Error searching documents (any): {e}")
             return []
 
+    async def get_job_files_for_nodes(
+        self,
+        node_ids: List[UUID],
+        file_types: Optional[List[str]] = None
+    ) -> dict[str, List[dict]]:
+        """
+        Получить файлы из job_files для списка узлов дерева.
+
+        Связь: tree_nodes.id → jobs.node_id → job_files.job_id
+
+        Args:
+            node_ids: Список UUID узлов документов
+            file_types: Типы файлов для фильтрации (по умолчанию: result_md, ocr_html)
+
+        Returns:
+            dict[node_id, List[file_info]] - маппинг node_id → список файлов
+        """
+        if not node_ids:
+            return {}
+
+        if file_types is None:
+            file_types = ["result_md", "ocr_html"]
+
+        try:
+            # 1. Получить jobs по node_id
+            node_ids_str = [str(nid) for nid in node_ids]
+            jobs_response = (
+                self.client.table("jobs")
+                .select("id, node_id")
+                .in_("node_id", node_ids_str)
+                .execute()
+            )
+
+            if not jobs_response.data:
+                return {}
+
+            # Маппинг job_id → node_id
+            job_to_node = {job["id"]: job["node_id"] for job in jobs_response.data}
+            job_ids = list(job_to_node.keys())
+
+            # 2. Получить job_files по job_id и file_type
+            files_response = (
+                self.client.table("job_files")
+                .select("*")
+                .in_("job_id", job_ids)
+                .in_("file_type", file_types)
+                .execute()
+            )
+
+            if not files_response.data:
+                return {}
+
+            # 3. Построить маппинг node_id → files
+            result: dict[str, List[dict]] = {}
+            for file in files_response.data:
+                node_id = job_to_node.get(file["job_id"])
+                if node_id:
+                    result.setdefault(str(node_id), []).append(file)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error getting job files for nodes: {e}")
+            return {}
+
 

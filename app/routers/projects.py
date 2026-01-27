@@ -22,20 +22,22 @@ async def get_tree_nodes(
     parent_id: Optional[UUID] = Query(None, description="ID родительского узла (None для корневых)"),
     node_type: Optional[str] = Query(None, description="Тип узла (client, project, section, stage, task, document)"),
     all_nodes: bool = Query(False, description="Получить все узлы (игнорировать parent_id)"),
+    include_files: bool = Query(False, description="Включить файлы результатов (MD, HTML) из job_files"),
     user_id: UUID = Depends(get_current_user_id),
     projects_db: SupabaseProjectsClient = Depends()
 ):
     """
     Получить узлы дерева проектов.
-    
+
     Args:
         client_id: ID клиента
         parent_id: ID родительского узла
         node_type: Тип узла
         all_nodes: Получить все узлы дерева
+        include_files: Включить файлы результатов (result_md, ocr_html) из job_files
         user_id: ID текущего пользователя
         projects_db: Клиент Projects DB
-    
+
     Returns:
         Список узлов дерева
     """
@@ -45,7 +47,25 @@ async def get_tree_nodes(
         node_type=node_type,
         all_nodes=all_nodes
     )
-    
+
+    # Если нужно включить файлы результатов
+    if include_files and nodes:
+        # Получить node_ids документов
+        doc_node_ids = [
+            UUID(node["id"]) if isinstance(node["id"], str) else node["id"]
+            for node in nodes
+            if node.get("node_type") == "document"
+        ]
+
+        if doc_node_ids:
+            # Получить файлы из job_files
+            files_map = await projects_db.get_job_files_for_nodes(doc_node_ids)
+
+            # Добавить файлы к соответствующим узлам
+            for node in nodes:
+                node_id_str = str(node.get("id"))
+                node["files"] = files_map.get(node_id_str, [])
+
     return [TreeNode(**node) for node in nodes]
 
 
