@@ -154,7 +154,52 @@ class SupabaseProjectsClient:
         except Exception as e:
             logger.error(f"Error getting document crops: {e}")
             return []
-    
+
+    async def get_blocks_index_for_node(self, document_node_id: UUID) -> Optional[dict]:
+        """
+        Получить файл blocks_index из job_files для документа.
+
+        Связь: tree_nodes.id → jobs.node_id → job_files.job_id (file_type='blocks_index')
+
+        Args:
+            document_node_id: UUID узла документа
+
+        Returns:
+            dict с информацией о файле blocks_index (r2_key, file_name) или None
+        """
+        try:
+            # 1. Найти job по node_id
+            jobs_response = (
+                self.client.table("jobs")
+                .select("id")
+                .eq("node_id", str(document_node_id))
+                .execute()
+            )
+
+            if not jobs_response.data:
+                return None
+
+            job_ids = [job["id"] for job in jobs_response.data]
+
+            # 2. Найти файл blocks_index в job_files
+            files_response = (
+                self.client.table("job_files")
+                .select("*")
+                .in_("job_id", job_ids)
+                .eq("file_type", "blocks_index")
+                .limit(1)
+                .execute()
+            )
+
+            if not files_response.data:
+                return None
+
+            return files_response.data[0]
+
+        except Exception as e:
+            logger.error(f"Error getting blocks_index for node: {e}")
+            return None
+
     async def search_documents(
         self,
         client_id: str,

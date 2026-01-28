@@ -351,6 +351,7 @@ async def chat_stream_sse(
     compare_document_ids_a: Optional[List[UUID]] = Query(default=None, description="ID документов для сравнения (A)"),
     compare_document_ids_b: Optional[List[UUID]] = Query(default=None, description="ID документов для сравнения (B)"),
     google_files: Optional[str] = Query(default=None, description="JSON с файлами из Google File API"),
+    tree_files: Optional[str] = Query(default=None, description="JSON с файлами MD/HTML из дерева [{r2_key, file_type}]"),
     current_user=Depends(get_current_user),
     supabase: SupabaseClient = Depends(),
     projects_db: SupabaseProjectsClient = Depends(),
@@ -386,6 +387,15 @@ async def chat_stream_sse(
         except Exception as e:
             logger.error(f"Failed to parse google_files: {e}")
 
+    # Парсим tree_files из JSON (файлы MD/HTML из дерева)
+    parsed_tree_files = None
+    if tree_files:
+        try:
+            parsed_tree_files = json_module.loads(tree_files)
+            logger.info(f"Parsed tree_files: {parsed_tree_files}")
+        except Exception as e:
+            logger.error(f"Failed to parse tree_files: {e}")
+
     # Функция-генератор для обработки (будет вызвана из очереди)
     async def process_request():
         async for event in agent.process_message(
@@ -396,6 +406,7 @@ async def chat_stream_sse(
             compare_document_ids_a=compare_document_ids_a,
             compare_document_ids_b=compare_document_ids_b,
             google_file_uris=parsed_google_files,
+            tree_files=parsed_tree_files,
             save_user_message=False
         ):
             # Конвертируем StreamEvent в dict для очереди

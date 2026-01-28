@@ -93,25 +93,27 @@ class AgentService:
         compare_document_ids_a: Optional[List[UUID]] = None,
         compare_document_ids_b: Optional[List[UUID]] = None,
         google_file_uris: Optional[List[str]] = None,
+        tree_files: Optional[List[Dict[str, Any]]] = None,
         save_user_message: bool = True
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Обработать сообщение пользователя с стримингом событий.
-        
+
         Пайплайн:
         1. Поиск в документах (search)
         2. Сбор контекста (processing)
         3. Генерация ответа LLM (llm)
         4. Обработка tool calls (zoom, request_images)
         5. Финальный ответ
-        
+
         Args:
             chat_id: ID чата
             user_message: Сообщение пользователя
             client_id: ID клиента для поиска документов
             document_ids: ID документов для контекста
             google_file_uris: URI файлов из Google File API
-        
+            tree_files: Файлы MD/HTML из дерева [{r2_key, file_type}]
+
         Yields:
             События стриминга
         """
@@ -127,6 +129,7 @@ class AgentService:
                     "compare_document_ids_a": [str(x) for x in (compare_document_ids_a or [])],
                     "compare_document_ids_b": [str(x) for x in (compare_document_ids_b or [])],
                     "google_files": google_file_uris or [],
+                    "tree_files": tree_files or [],
                 },
             )
             if self._has_html_files(google_file_uris):
@@ -181,7 +184,20 @@ class AgentService:
                 yield self._create_progress_event("processing", 1.0, "Контекст подготовлен")
             else:
                 context_text = ""
-            
+
+            # Загрузка контента из tree_files (MD/HTML файлы из дерева)
+            if tree_files:
+                yield self._create_phase_event("processing", "Загрузка прикреплённых файлов...")
+                tree_files_context = await self._load_tree_files_content(tree_files)
+                if tree_files_context:
+                    if context_text:
+                        context_text += "\n\n" + tree_files_context
+                    else:
+                        context_text = tree_files_context
+                    if llm_logger:
+                        llm_logger.log_section("TREE_FILES_CONTEXT", tree_files_context[:2000])
+                yield self._create_progress_event("processing", 1.0, "Файлы загружены")
+
             # Фаза 3: Генерация ответа
             yield self._create_phase_event("llm", "Генерация ответа...")
             
@@ -638,10 +654,18 @@ class AgentService:
             pdf_bytes = None
             cache_key = None
             if crop:
-                r2_key = crop.get("r2_key")
-                if r2_key:
-                    pdf_bytes = await self.s3_client.download_bytes(r2_key)
-                    cache_key = r2_key
+                # Приоритет: crop_url из blocks_index → r2_key из node_files
+                if crop.get("crop_url"):
+                    pdf_bytes = await self._download_public(crop["crop_url"])
+                    cache_key = crop["crop_url"]
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "BLOCKS_INDEX_CROP",
+                            {"block_id": req.block_id, "crop_url": crop["crop_url"]},
+                        )
+                elif crop.get("r2_key"):
+                    pdf_bytes = await self.s3_client.download_bytes(crop["r2_key"])
+                    cache_key = crop["r2_key"]
             if not pdf_bytes and html_crop_map:
                 crop_url = html_crop_map.get(req.block_id)
                 if crop_url:
@@ -677,10 +701,18 @@ class AgentService:
             pdf_bytes = None
             cache_key = None
             if crop:
-                r2_key = crop.get("r2_key")
-                if r2_key:
-                    pdf_bytes = await self.s3_client.download_bytes(r2_key)
-                    cache_key = r2_key
+                # Приоритет: crop_url из blocks_index → r2_key из node_files
+                if crop.get("crop_url"):
+                    pdf_bytes = await self._download_public(crop["crop_url"])
+                    cache_key = crop["crop_url"]
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "BLOCKS_INDEX_CROP",
+                            {"block_id": roi.block_id, "crop_url": crop["crop_url"]},
+                        )
+                elif crop.get("r2_key"):
+                    pdf_bytes = await self.s3_client.download_bytes(crop["r2_key"])
+                    cache_key = crop["r2_key"]
             if not pdf_bytes and html_crop_map:
                 crop_url = html_crop_map.get(roi.block_id)
                 if crop_url:
@@ -1253,18 +1285,22 @@ class AgentService:
                     logger.warning(f"Crop not found for image_id: {image_id}")
                     continue
                 
-                r2_key = crop.get("r2_key")
-                if not r2_key:
-                    continue
-                
-                # Скачиваем файл из S3/R2
-                file_bytes = await self.s3_client.download_bytes(r2_key)
+                # Приоритет: crop_url из blocks_index → r2_key из node_files
+                file_bytes = None
+                source_id = None
+                if crop.get("crop_url"):
+                    file_bytes = await self._download_public(crop["crop_url"])
+                    source_id = crop["crop_url"]
+                elif crop.get("r2_key"):
+                    file_bytes = await self.s3_client.download_bytes(crop["r2_key"])
+                    source_id = crop["r2_key"]
+
                 if not file_bytes:
-                    logger.warning(f"Failed to download: {r2_key}")
+                    logger.warning(f"Failed to download crop for image_id: {image_id}")
                     continue
 
                 renders = self.evidence_service.build_preview_and_quadrants(
-                    file_bytes, source_id=r2_key, page=0, dpi=150
+                    file_bytes, source_id=source_id, page=0, dpi=150
                 )
                 for render in renders:
                     google_file = await self._upload_png_to_google(render.png_bytes, f"{image_id}_{render.kind}")
@@ -1292,17 +1328,21 @@ class AgentService:
             if not crop:
                 return []
             
-            r2_key = crop.get("r2_key")
-            if not r2_key:
-                return []
-            
-            # Скачиваем файл
-            file_bytes = await self.s3_client.download_bytes(r2_key)
+            # Приоритет: crop_url из blocks_index → r2_key из node_files
+            file_bytes = None
+            source_id = None
+            if crop.get("crop_url"):
+                file_bytes = await self._download_public(crop["crop_url"])
+                source_id = crop["crop_url"]
+            elif crop.get("r2_key"):
+                file_bytes = await self.s3_client.download_bytes(crop["r2_key"])
+                source_id = crop["r2_key"]
+
             if not file_bytes:
                 return []
-            
+
             # Определяем тип файла
-            is_pdf = r2_key.lower().endswith(".pdf")
+            is_pdf = (source_id or "").lower().endswith(".pdf")
             
             # Вырезаем zoom область
             zoom_bytes = await self._crop_image(file_bytes, coords, is_pdf)
@@ -1743,19 +1783,82 @@ class AgentService:
                 context_parts.append(f"[{label}]:\n{text}\n")
 
             # Добавляем каталог изображений
-            annotation = next((x for x in files if x.get("file_type") == "annotation"), None)
-            if annotation and annotation.get("r2_key"):
-                catalog = await self._build_image_catalog(annotation.get("r2_key"))
-                if catalog:
-                    context_parts.append("КАТАЛОГ ИЗОБРАЖЕНИЙ (block_id):\n" + catalog)
+            # Приоритет: blocks_index из job_files → annotation из node_files
+            catalog = ""
+            blocks_index = await self.projects_db.get_blocks_index_for_node(doc_id)
+            if blocks_index and blocks_index.get("r2_key"):
+                catalog = await self._build_image_catalog(blocks_index.get("r2_key"))
+            else:
+                annotation = next((x for x in files if x.get("file_type") == "annotation"), None)
+                if annotation and annotation.get("r2_key"):
+                    catalog = await self._build_image_catalog(annotation.get("r2_key"))
+
+            if catalog:
+                context_parts.append("КАТАЛОГ ИЗОБРАЖЕНИЙ (block_id):\n" + catalog)
 
         if not context_parts:
             return ""
 
         return "\n".join(context_parts)
 
+    async def _load_tree_files_content(self, tree_files: List[Dict[str, Any]]) -> str:
+        """Загрузить контент из файлов MD/HTML из дерева проектов.
+
+        Args:
+            tree_files: Список файлов [{r2_key, file_type}]
+
+        Returns:
+            Текстовый контент файлов для добавления в контекст LLM
+        """
+        if not tree_files:
+            return ""
+
+        context_parts = []
+        max_chars_per_file = 30000  # Лимит на файл
+
+        for file_info in tree_files:
+            r2_key = file_info.get("r2_key")
+            file_type = file_info.get("file_type", "unknown")
+
+            if not r2_key:
+                continue
+
+            try:
+                # Скачиваем файл
+                data = await self._download_bytes(r2_key)
+                if not data:
+                    logger.warning(f"Failed to download tree_file: {r2_key}")
+                    continue
+
+                text = data.decode("utf-8", errors="ignore")
+
+                # Очистка HTML если нужно
+                if file_type == "ocr_html":
+                    import re
+                    text = re.sub(r"<[^>]+>", " ", text)
+                    text = re.sub(r"\s+", " ", text).strip()
+
+                # Ограничиваем размер
+                if len(text) > max_chars_per_file:
+                    text = text[:max_chars_per_file] + "\n[...TRUNCATED...]"
+
+                # Определяем метку
+                file_name = Path(r2_key).name if r2_key else "unknown"
+                label = "MD" if file_type == "result_md" else "HTML_OCR"
+                context_parts.append(f"=== ФАЙЛ: {file_name} ({label}) ===\n{text}")
+
+            except Exception as e:
+                logger.error(f"Error loading tree_file {r2_key}: {e}")
+
+        return "\n\n".join(context_parts)
+
     async def _build_image_catalog(self, r2_key: str) -> str:
-        """Собрать каталог block_id из annotation.json."""
+        """Собрать каталог block_id из annotation.json или blocks_index.json.
+
+        Поддерживаемые форматы:
+        1. blocks_index: { "blocks": [{ "id", "page_index", "block_type" }] }
+        2. annotation: { "pages": [{ "page_number", "blocks": [{ "id" }] }] }
+        """
         data = await self.s3_client.download_bytes(r2_key)
         if not data:
             url = self._build_public_url(r2_key)
@@ -1771,14 +1874,29 @@ class AgentService:
             return ""
 
         lines = []
-        pages = payload.get("pages", [])
-        for page in pages:
-            page_number = page.get("page_number") or page.get("page_index")
-            for block in page.get("blocks", []):
-                block_id = block.get("id") or block.get("block_id")
+
+        # Новый формат blocks_index: { "blocks": [...] } (без вложенности в pages)
+        if "blocks" in payload and not "pages" in payload:
+            for block in payload.get("blocks", []):
+                block_id = block.get("id")
                 if not block_id:
                     continue
-                lines.append(f"- {block_id} (стр. {page_number})")
+                block_type = block.get("block_type", "")
+                page_index = block.get("page_index")
+                if page_index is not None:
+                    lines.append(f"- {block_id} (стр. {page_index + 1}, {block_type})")
+                else:
+                    lines.append(f"- {block_id} ({block_type})")
+        # Старый формат annotation: { "pages": [{ "blocks": [...] }] }
+        else:
+            pages = payload.get("pages", [])
+            for page in pages:
+                page_number = page.get("page_number") or page.get("page_index")
+                for block in page.get("blocks", []):
+                    block_id = block.get("id") or block.get("block_id")
+                    if not block_id:
+                        continue
+                    lines.append(f"- {block_id} (стр. {page_number})")
 
         return "\n".join(lines[:500])
 
@@ -1808,8 +1926,11 @@ class AgentService:
             if not crop:
                 continue
 
-            r2_key = crop.get("r2_key")
-            file_name = crop.get("file_name") or Path(r2_key).name
+            # Приоритет: crop_url из blocks_index → r2_key из node_files
+            storage_path = crop.get("crop_url") or crop.get("r2_key")
+            if not storage_path:
+                continue
+            file_name = crop.get("file_name") or Path(storage_path).name
             mime = crop.get("mime_type") or ("application/pdf" if file_name.endswith(".pdf") else "image/png")
 
             # Создаём запись storage_files
@@ -1818,7 +1939,7 @@ class AgentService:
                 filename=file_name,
                 mime_type=mime,
                 size_bytes=crop.get("file_size") or 0,
-                storage_path=r2_key,
+                storage_path=storage_path,
                 source_type="projects_crop"
             )
 
@@ -1852,17 +1973,22 @@ class AgentService:
         if not crop:
             return
 
-        r2_key = crop.get("r2_key")
-        if not r2_key:
-            return
+        # Приоритет: crop_url из blocks_index → r2_key из node_files
+        data = None
+        source_id = None
+        if crop.get("crop_url"):
+            data = await self._download_public(crop["crop_url"])
+            source_id = crop["crop_url"]
+        elif crop.get("r2_key"):
+            data = await self._download_bytes(crop["r2_key"])
+            source_id = crop["r2_key"]
 
-        data = await self._download_bytes(r2_key)
         if not data:
             return
 
         # Load image (pdf or image)
         img = None
-        if str(r2_key).lower().endswith(".pdf"):
+        if str(source_id or "").lower().endswith(".pdf"):
             try:
                 doc = fitz.open(stream=data, filetype="pdf")
                 page = doc.load_page(0)
@@ -2007,10 +2133,36 @@ class AgentService:
         image_id: str,
         document_ids: Optional[List[UUID]]
     ) -> Optional[Dict[str, Any]]:
-        """Найти crop по image_id в выбранных документах."""
+        """Найти crop по image_id в выбранных документах.
+
+        Приоритет поиска:
+        1. blocks_index (job_files) - новый формат с прямыми crop_url
+        2. node_files (file_type='crop') - старый формат с r2_key
+        """
         if not document_ids:
             return None
 
+        # 1. Попробовать найти в blocks_index (новый способ)
+        for doc_id in document_ids:
+            blocks_index_file = await self.projects_db.get_blocks_index_for_node(doc_id)
+            if blocks_index_file and blocks_index_file.get("r2_key"):
+                try:
+                    data = await self._download_bytes(blocks_index_file["r2_key"])
+                    if data:
+                        blocks_data = json.loads(data.decode("utf-8", errors="ignore"))
+                        for block in blocks_data.get("blocks", []):
+                            if block.get("id") == image_id and block.get("crop_url"):
+                                # Возвращаем в формате совместимом с существующим кодом
+                                return {
+                                    "crop_url": block["crop_url"],
+                                    "r2_key": None,
+                                    "page_index": block.get("page_index"),
+                                    "block_type": block.get("block_type")
+                                }
+                except Exception as e:
+                    logger.warning(f"Error parsing blocks_index for doc {doc_id}: {e}")
+
+        # 2. Fallback на старую логику (node_files crops)
         crops = []
         for doc_id in document_ids:
             crops.extend(await self.projects_db.get_document_crops(doc_id))
