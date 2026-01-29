@@ -879,38 +879,14 @@ class AgentService:
                     google_files=google_files or [],
                 )
 
-            # Стриминг ответа LLM с передачей токенов клиенту
-            accumulated_text = ""
-            accumulated_thinking = ""
-            async for chunk in self.llm_service.stream_answer(
+            # Получаем ответ LLM (без стриминга сырого JSON)
+            answer_dict, raw_text = await self.llm_service.run_answer(
                 system_prompt=system_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
                 model_name=settings.default_flash_model or settings.default_model,
-            ):
-                chunk_type = chunk.get("type")
-                content = chunk.get("content", "")
-
-                if chunk_type == "thinking" and content:
-                    accumulated_thinking += content
-                    yield StreamEvent(
-                        event="llm_thinking",
-                        data={"content": content, "accumulated": accumulated_thinking},
-                        timestamp=datetime.utcnow()
-                    )
-                elif chunk_type == "text" and content:
-                    accumulated_text += content
-                    yield StreamEvent(
-                        event="llm_token",
-                        data=LLMTokenEvent(token=content, accumulated=accumulated_text).dict(),
-                        timestamp=datetime.utcnow()
-                    )
-                elif chunk_type == "done":
-                    accumulated_text = chunk.get("accumulated", accumulated_text)
-
-            # Парсим JSON после завершения стрима
-            raw_text = accumulated_text
-            answer_dict = self.llm_service.parse_json(raw_text)
+                return_text=True,
+            )
             if llm_logger:
                 llm_logger.log_response(phase=f"simple_answer_{iteration}", response_text=raw_text)
             try:
@@ -1206,38 +1182,14 @@ class AgentService:
                     google_files=google_files or [],
                 )
 
-            # Стриминг ответа LLM с передачей токенов клиенту
-            accumulated_text = ""
-            accumulated_thinking = ""
-            async for chunk in self.llm_service.stream_answer(
+            # Получаем ответ LLM (без стриминга сырого JSON)
+            answer_dict, raw_text = await self.llm_service.run_answer(
                 system_prompt=pro_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
                 model_name=settings.default_pro_model or settings.default_model,
-            ):
-                chunk_type = chunk.get("type")
-                content = chunk.get("content", "")
-
-                if chunk_type == "thinking" and content:
-                    accumulated_thinking += content
-                    yield StreamEvent(
-                        event="llm_thinking",
-                        data={"content": content, "accumulated": accumulated_thinking},
-                        timestamp=datetime.utcnow()
-                    )
-                elif chunk_type == "text" and content:
-                    accumulated_text += content
-                    yield StreamEvent(
-                        event="llm_token",
-                        data=LLMTokenEvent(token=content, accumulated=accumulated_text).dict(),
-                        timestamp=datetime.utcnow()
-                    )
-                elif chunk_type == "done":
-                    accumulated_text = chunk.get("accumulated", accumulated_text)
-
-            # Парсим JSON после завершения стрима
-            raw_text = accumulated_text
-            answer_dict = self.llm_service.parse_json(raw_text)
+                return_text=True,
+            )
             if llm_logger:
                 llm_logger.log_response(phase=f"compare_pro_answer_{iteration}", response_text=raw_text)
             answer = AnswerResponse.model_validate(answer_dict)
@@ -1540,6 +1492,10 @@ class AgentService:
         if payloads:
             for payload in payloads:
                 full_text = payload.get("full_text") or ""
+                # Fallback на context_text если full_text пустой (например, S3 ошибка)
+                if not full_text and context_text:
+                    full_text = context_text
+                    logger.info(f"Using context_text as fallback for doc {payload.get('doc_id')}")
                 prompt_parts = [full_text, html_note, intent_note, f"USER QUESTION:\n{user_message}"]
                 user_prompt = "\n\n".join(p for p in prompt_parts if p)
                 if llm_logger:
@@ -1666,38 +1622,14 @@ class AgentService:
                     google_files=google_files or [],
                 )
 
-            # Стриминг ответа LLM с передачей токенов клиенту
-            accumulated_text = ""
-            accumulated_thinking = ""
-            async for chunk in self.llm_service.stream_answer(
+            # Получаем ответ LLM (без стриминга сырого JSON)
+            answer_dict, raw_text = await self.llm_service.run_answer(
                 system_prompt=pro_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
                 model_name=settings.default_pro_model or settings.default_model,
-            ):
-                chunk_type = chunk.get("type")
-                content = chunk.get("content", "")
-
-                if chunk_type == "thinking" and content:
-                    accumulated_thinking += content
-                    yield StreamEvent(
-                        event="llm_thinking",
-                        data={"content": content, "accumulated": accumulated_thinking},
-                        timestamp=datetime.utcnow()
-                    )
-                elif chunk_type == "text" and content:
-                    accumulated_text += content
-                    yield StreamEvent(
-                        event="llm_token",
-                        data=LLMTokenEvent(token=content, accumulated=accumulated_text).dict(),
-                        timestamp=datetime.utcnow()
-                    )
-                elif chunk_type == "done":
-                    accumulated_text = chunk.get("accumulated", accumulated_text)
-
-            # Парсим JSON после завершения стрима
-            raw_text = accumulated_text
-            answer_dict = self.llm_service.parse_json(raw_text)
+                return_text=True,
+            )
             if llm_logger:
                 llm_logger.log_response(phase=f"pro_answer_{iteration}", response_text=raw_text)
             answer = AnswerResponse.model_validate(answer_dict)
