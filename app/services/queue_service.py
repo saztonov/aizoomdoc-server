@@ -246,10 +246,12 @@ class QueueService:
             События от processor + события очереди
         """
         request_id, initial_status = await self.enqueue(chat_id)
-        
+
         try:
-            # Отправляем начальный статус очереди
-            if initial_status.position > 0:
+            # Отправляем начальный статус очереди ТОЛЬКО если придётся ждать
+            # (когда все слоты заняты: active_requests >= max_concurrent)
+            will_wait = initial_status.active_requests >= settings.queue_max_concurrent
+            if will_wait and initial_status.position > 0:
                 yield {
                     "event": "queue_position",
                     "data": {

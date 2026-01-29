@@ -349,6 +349,61 @@ class LLMService:
             return parsed, text
         return parsed
 
+    async def stream_answer(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        google_file_uris: Optional[Iterable[Union[dict, str]]] = None,
+        model_name: Optional[str] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Стриминг ответа с поддержкой thinking и текста.
+
+        Используется для потоковой передачи токенов клиенту во время генерации.
+
+        Args:
+            system_prompt: Системный промпт
+            user_message: Сообщение пользователя
+            google_file_uris: URI файлов из Google File API
+            model_name: Имя модели (опционально)
+
+        Yields:
+            {"type": "thinking", "content": str} - для thinking токенов
+            {"type": "text", "content": str} - для текстовых токенов
+            {"type": "done", "accumulated": str} - финальный накопленный текст
+        """
+        try:
+            contents = self._build_contents(user_message, google_file_uris)
+            config = self._build_generation_config(system_prompt, response_schema=get_answer_schema())
+
+            accumulated = ""
+            response = self.client.models.generate_content_stream(
+                model=model_name or self.model_name,
+                contents=contents,
+                config=config,
+            )
+
+            for chunk in response:
+                if hasattr(chunk, 'candidates') and chunk.candidates:
+                    for candidate in chunk.candidates:
+                        if hasattr(candidate, 'content') and candidate.content:
+                            for part in candidate.content.parts:
+                                # Проверяем, это thinking или обычный текст
+                                if hasattr(part, 'thought') and part.thought:
+                                    yield {"type": "thinking", "content": part.text or ""}
+                                elif hasattr(part, 'text') and part.text:
+                                    accumulated += part.text
+                                    yield {"type": "text", "content": part.text}
+                elif hasattr(chunk, 'text') and chunk.text:
+                    accumulated += chunk.text
+                    yield {"type": "text", "content": chunk.text}
+
+            yield {"type": "done", "accumulated": accumulated}
+
+        except Exception as e:
+            logger.error(f"Error in stream_answer: {e}")
+            raise
+
     async def run_analysis_intent(
         self,
         *,

@@ -121,6 +121,16 @@ class AgentService:
         try:
             llm_logger = LLMDialogLogger(str(chat_id))
             llm_logger.log_section("USER MESSAGE", user_message)
+            # Извлечь document_ids из tree_files r2_key
+            extracted_doc_ids = self._extract_document_ids_from_tree_files(tree_files)
+            if extracted_doc_ids:
+                # Объединяем переданные document_ids с извлечёнными из tree_files
+                existing_ids = set(document_ids or [])
+                for doc_id in extracted_doc_ids:
+                    existing_ids.add(doc_id)
+                document_ids = list(existing_ids)
+                logger.info(f"Combined document_ids (from params + tree_files): {document_ids}")
+
             llm_logger.log_section(
                 "REQUEST CONTEXT",
                 {
@@ -869,13 +879,38 @@ class AgentService:
                     google_files=google_files or [],
                 )
 
-            answer_dict, raw_text = await self.llm_service.run_answer(
+            # Стриминг ответа LLM с передачей токенов клиенту
+            accumulated_text = ""
+            accumulated_thinking = ""
+            async for chunk in self.llm_service.stream_answer(
                 system_prompt=system_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
                 model_name=settings.default_flash_model or settings.default_model,
-                return_text=True,
-            )
+            ):
+                chunk_type = chunk.get("type")
+                content = chunk.get("content", "")
+
+                if chunk_type == "thinking" and content:
+                    accumulated_thinking += content
+                    yield StreamEvent(
+                        event="llm_thinking",
+                        data={"content": content, "accumulated": accumulated_thinking},
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "text" and content:
+                    accumulated_text += content
+                    yield StreamEvent(
+                        event="llm_token",
+                        data=LLMTokenEvent(token=content, accumulated=accumulated_text).dict(),
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "done":
+                    accumulated_text = chunk.get("accumulated", accumulated_text)
+
+            # Парсим JSON после завершения стрима
+            raw_text = accumulated_text
+            answer_dict = self.llm_service.parse_json(raw_text)
             if llm_logger:
                 llm_logger.log_response(phase=f"simple_answer_{iteration}", response_text=raw_text)
             try:
@@ -1170,13 +1205,39 @@ class AgentService:
                     user_prompt=user_prompt,
                     google_files=google_files or [],
                 )
-            answer_dict, raw_text = await self.llm_service.run_answer(
+
+            # Стриминг ответа LLM с передачей токенов клиенту
+            accumulated_text = ""
+            accumulated_thinking = ""
+            async for chunk in self.llm_service.stream_answer(
                 system_prompt=pro_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
                 model_name=settings.default_pro_model or settings.default_model,
-                return_text=True,
-            )
+            ):
+                chunk_type = chunk.get("type")
+                content = chunk.get("content", "")
+
+                if chunk_type == "thinking" and content:
+                    accumulated_thinking += content
+                    yield StreamEvent(
+                        event="llm_thinking",
+                        data={"content": content, "accumulated": accumulated_thinking},
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "text" and content:
+                    accumulated_text += content
+                    yield StreamEvent(
+                        event="llm_token",
+                        data=LLMTokenEvent(token=content, accumulated=accumulated_text).dict(),
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "done":
+                    accumulated_text = chunk.get("accumulated", accumulated_text)
+
+            # Парсим JSON после завершения стрима
+            raw_text = accumulated_text
+            answer_dict = self.llm_service.parse_json(raw_text)
             if llm_logger:
                 llm_logger.log_response(phase=f"compare_pro_answer_{iteration}", response_text=raw_text)
             answer = AnswerResponse.model_validate(answer_dict)
@@ -1604,13 +1665,39 @@ class AgentService:
                     user_prompt=user_prompt,
                     google_files=google_files or [],
                 )
-            answer_dict, raw_text = await self.llm_service.run_answer(
+
+            # Стриминг ответа LLM с передачей токенов клиенту
+            accumulated_text = ""
+            accumulated_thinking = ""
+            async for chunk in self.llm_service.stream_answer(
                 system_prompt=pro_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
                 model_name=settings.default_pro_model or settings.default_model,
-                return_text=True,
-            )
+            ):
+                chunk_type = chunk.get("type")
+                content = chunk.get("content", "")
+
+                if chunk_type == "thinking" and content:
+                    accumulated_thinking += content
+                    yield StreamEvent(
+                        event="llm_thinking",
+                        data={"content": content, "accumulated": accumulated_thinking},
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "text" and content:
+                    accumulated_text += content
+                    yield StreamEvent(
+                        event="llm_token",
+                        data=LLMTokenEvent(token=content, accumulated=accumulated_text).dict(),
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "done":
+                    accumulated_text = chunk.get("accumulated", accumulated_text)
+
+            # Парсим JSON после завершения стрима
+            raw_text = accumulated_text
+            answer_dict = self.llm_service.parse_json(raw_text)
             if llm_logger:
                 llm_logger.log_response(phase=f"pro_answer_{iteration}", response_text=raw_text)
             answer = AnswerResponse.model_validate(answer_dict)
@@ -1851,6 +1938,38 @@ class AgentService:
                 logger.error(f"Error loading tree_file {r2_key}: {e}")
 
         return "\n\n".join(context_parts)
+
+    def _extract_document_ids_from_tree_files(
+        self, tree_files: Optional[List[Dict[str, Any]]]
+    ) -> List[UUID]:
+        """Извлечь document_id из r2_key tree_files.
+
+        Формат r2_key: tree_docs/{document_id}/filename.md
+
+        Args:
+            tree_files: Список файлов [{r2_key, file_type}]
+
+        Returns:
+            Список UUID документов
+        """
+        if not tree_files:
+            return []
+
+        extracted_ids: List[UUID] = []
+        for file_info in tree_files:
+            r2_key = file_info.get("r2_key", "")
+            # Формат: tree_docs/{uuid}/filename.md
+            parts = r2_key.split("/")
+            if len(parts) >= 2 and parts[0] == "tree_docs":
+                try:
+                    doc_id = UUID(parts[1])
+                    if doc_id not in extracted_ids:
+                        extracted_ids.append(doc_id)
+                        logger.info(f"Extracted document_id from tree_files: {doc_id}")
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Failed to extract document_id from r2_key '{r2_key}': {e}")
+                    continue
+        return extracted_ids
 
     async def _build_image_catalog(self, r2_key: str) -> str:
         """Собрать каталог block_id из annotation.json или blocks_index.json.
