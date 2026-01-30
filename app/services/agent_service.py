@@ -54,6 +54,50 @@ def load_prompt(name: str) -> str:
     return ""
 
 
+def extract_answer_markdown(partial_json: str) -> str:
+    """
+    Извлечь значение answer_markdown из частичного JSON.
+
+    Используется во время стриминга, когда JSON ещё не полный.
+    Возвращает пустую строку, если поле не найдено.
+    """
+    # Ищем начало поля answer_markdown
+    pattern = r'"answer_markdown"\s*:\s*"'
+    match = re.search(pattern, partial_json)
+    if not match:
+        return ""
+
+    start_idx = match.end()
+    result = []
+    i = start_idx
+
+    # Извлекаем содержимое строки с учётом экранирования
+    while i < len(partial_json):
+        char = partial_json[i]
+        if char == '\\' and i + 1 < len(partial_json):
+            # Обработка escape-последовательностей
+            next_char = partial_json[i + 1]
+            if next_char == 'n':
+                result.append('\n')
+            elif next_char == 't':
+                result.append('\t')
+            elif next_char == '"':
+                result.append('"')
+            elif next_char == '\\':
+                result.append('\\')
+            else:
+                result.append(next_char)
+            i += 2
+        elif char == '"':
+            # Конец строки
+            break
+        else:
+            result.append(char)
+            i += 1
+
+    return ''.join(result)
+
+
 class AgentService:
     """Сервис агента для обработки запросов пользователя."""
     
@@ -1668,9 +1712,11 @@ class AgentService:
                     )
                 elif chunk_type == "text" and content:
                     accumulated_text += content
+                    # Извлекаем answer_markdown из частичного JSON для отображения
+                    display_text = extract_answer_markdown(accumulated_text)
                     yield StreamEvent(
                         event="llm_token",
-                        data=LLMTokenEvent(token=content, accumulated=accumulated_text, model="pro").dict(),
+                        data=LLMTokenEvent(token=content, accumulated=display_text, model="pro").dict(),
                         timestamp=datetime.utcnow()
                     )
                 elif chunk_type == "done":
