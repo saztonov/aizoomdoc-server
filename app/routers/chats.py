@@ -412,7 +412,8 @@ async def chat_stream_sse(
             compare_document_ids_b=compare_document_ids_b,
             google_file_uris=parsed_google_files,
             tree_files=parsed_tree_files,
-            save_user_message=False
+            save_user_message=False,
+            existing_user_message_id=last_user_message.id
         ):
             # Конвертируем StreamEvent в dict для очереди
             yield {

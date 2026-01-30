@@ -138,7 +138,8 @@ class AgentService:
         compare_document_ids_b: Optional[List[UUID]] = None,
         google_file_uris: Optional[List[str]] = None,
         tree_files: Optional[List[Dict[str, Any]]] = None,
-        save_user_message: bool = True
+        save_user_message: bool = True,
+        existing_user_message_id: Optional[UUID] = None
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Обработать сообщение пользователя с стримингом событий.
@@ -199,7 +200,8 @@ class AgentService:
                     role="user",
                     content=user_message
                 )
-            user_message_id = user_msg.id if user_msg else None
+            # Используем ID нового сообщения или существующего (если передан)
+            user_message_id = user_msg.id if user_msg else existing_user_message_id
             
             context_text = ""
 
