@@ -5,11 +5,14 @@ Local LLM dialog logger.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LLMDialogLogger:
@@ -18,9 +21,14 @@ class LLMDialogLogger:
     def __init__(self, chat_id: str) -> None:
         self.enabled = settings.llm_log_enabled
         self.max_chars = settings.llm_log_truncate_chars
+        # Используем абсолютный путь от корня проекта
         log_dir = Path(settings.llm_log_dir)
+        if not log_dir.is_absolute():
+            # Если путь относительный, делаем его относительно корня проекта
+            log_dir = Path(__file__).parent.parent.parent / settings.llm_log_dir
         log_dir.mkdir(parents=True, exist_ok=True)
         self.path = log_dir / f"llm_dialog_{chat_id}.log"
+        logger.info(f"LLM dialog log initialized: {self.path}")
 
     def _timestamp(self) -> str:
         return datetime.now().strftime("%H:%M:%S.%f")[:-3]

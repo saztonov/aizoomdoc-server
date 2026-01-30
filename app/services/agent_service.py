@@ -660,6 +660,16 @@ class AgentService:
             )
 
         for req in requested_images:
+            # Валидация формата block_id (XXXX-XXXX-XXX)
+            if not re.match(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{3}$', req.block_id):
+                logger.warning(f"Invalid block_id format: {req.block_id} - skipping (expected XXXX-XXXX-XXX)")
+                if llm_logger:
+                    llm_logger.log_section("INVALID_BLOCK_ID", {
+                        "block_id": req.block_id,
+                        "reason": "Format does not match XXXX-XXXX-XXX pattern - likely hallucinated by LLM"
+                    })
+                continue
+
             crop = await self._find_crop_by_image_id(req.block_id, document_ids)
             pdf_bytes = None
             cache_key = None
@@ -707,6 +717,16 @@ class AgentService:
                     materials_images.append(material)
 
         for roi in requested_rois:
+            # Валидация формата block_id (XXXX-XXXX-XXX)
+            if not re.match(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{3}$', roi.block_id):
+                logger.warning(f"Invalid block_id format: {roi.block_id} - skipping (expected XXXX-XXXX-XXX)")
+                if llm_logger:
+                    llm_logger.log_section("INVALID_BLOCK_ID", {
+                        "block_id": roi.block_id,
+                        "reason": "Format does not match XXXX-XXXX-XXX pattern - likely hallucinated by LLM"
+                    })
+                continue
+
             crop = await self._find_crop_by_image_id(roi.block_id, document_ids)
             pdf_bytes = None
             cache_key = None
@@ -1833,7 +1853,7 @@ class AgentService:
             return ""
 
         context_parts = []
-        max_chars_per_file = 30000  # Лимит на файл
+        max_chars_per_file = 2500000  # Увеличено для полных MD документов (было 30000)
 
         for file_info in tree_files:
             r2_key = file_info.get("r2_key")
