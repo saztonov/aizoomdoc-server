@@ -119,6 +119,9 @@ class AgentService:
         """
         llm_logger: Optional[LLMDialogLogger] = None
         try:
+            # Сохраняем tree_files для использования в _find_crop_by_image_id
+            self._current_tree_files = tree_files
+
             llm_logger = LLMDialogLogger(str(chat_id))
             llm_logger.log_section("USER MESSAGE", user_message)
             # Извлечь document_ids из tree_files r2_key
@@ -1642,16 +1645,46 @@ class AgentService:
                     google_files=google_files or [],
                 )
 
-            # Получаем ответ LLM (без стриминга сырого JSON)
-            answer_dict, raw_text = await self.llm_service.run_answer(
+            # Получаем ответ LLM со стримингом токенов
+            accumulated_text = ""
+            accumulated_thinking = ""
+            raw_text = ""  # Инициализируем для безопасности
+            model_name = settings.default_pro_model or settings.default_model
+            async for chunk in self.llm_service.stream_answer(
                 system_prompt=pro_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
-                model_name=settings.default_pro_model or settings.default_model,
-                return_text=True,
-            )
+                model_name=model_name,
+            ):
+                chunk_type = chunk.get("type", "")
+                content = chunk.get("content", "")
+
+                if chunk_type == "thinking" and content:
+                    accumulated_thinking += content
+                    yield StreamEvent(
+                        event="llm_thinking",
+                        data={"content": content, "accumulated": accumulated_thinking, "model": "pro"},
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "text" and content:
+                    accumulated_text += content
+                    yield StreamEvent(
+                        event="llm_token",
+                        data=LLMTokenEvent(token=content, accumulated=accumulated_text, model="pro").dict(),
+                        timestamp=datetime.utcnow()
+                    )
+                elif chunk_type == "done":
+                    raw_text = chunk.get("accumulated", accumulated_text)
+
+            # Fallback если "done" не пришел
+            if not raw_text:
+                raw_text = accumulated_text
+
             if llm_logger:
                 llm_logger.log_response(phase=f"pro_answer_{iteration}", response_text=raw_text)
+
+            # Парсим JSON из накопленного текста
+            answer_dict = self.llm_service.parse_json(raw_text)
             answer = AnswerResponse.model_validate(answer_dict)
 
             if self._should_force_roi_followup(answer, analysis_intent):
@@ -2207,33 +2240,35 @@ class AgentService:
         """Найти crop по image_id в выбранных документах.
 
         Приоритет поиска:
-        1. blocks_index (job_files) - новый формат с прямыми crop_url
-        2. node_files (file_type='crop') - старый формат с r2_key
+        1. blocks_index (job_files) - через БД
+        2. blocks_index (tree_files) - через путь из прикрепленного MD файла
+        3. node_files (file_type='crop') - старый формат с r2_key
         """
         if not document_ids:
             return None
 
-        # 1. Попробовать найти в blocks_index (новый способ)
+        # 1. Попробовать найти в blocks_index через БД
         for doc_id in document_ids:
             blocks_index_file = await self.projects_db.get_blocks_index_for_node(doc_id)
             if blocks_index_file and blocks_index_file.get("r2_key"):
-                try:
-                    data = await self._download_bytes(blocks_index_file["r2_key"])
-                    if data:
-                        blocks_data = json.loads(data.decode("utf-8", errors="ignore"))
-                        for block in blocks_data.get("blocks", []):
-                            if block.get("id") == image_id and block.get("crop_url"):
-                                # Возвращаем в формате совместимом с существующим кодом
-                                return {
-                                    "crop_url": block["crop_url"],
-                                    "r2_key": None,
-                                    "page_index": block.get("page_index"),
-                                    "block_type": block.get("block_type")
-                                }
-                except Exception as e:
-                    logger.warning(f"Error parsing blocks_index for doc {doc_id}: {e}")
+                result = await self._search_in_blocks_index(blocks_index_file["r2_key"], image_id)
+                if result:
+                    return result
 
-        # 2. Fallback на старую логику (node_files crops)
+        # 2. Fallback: построить путь к blocks_index из tree_files
+        tree_files = getattr(self, '_current_tree_files', None)
+        if tree_files:
+            for tf in tree_files:
+                r2_key = tf.get("r2_key", "")
+                if "_document.md" in r2_key:
+                    # Заменить _document.md на _blocks.json
+                    blocks_key = r2_key.replace("_document.md", "_blocks.json")
+                    logger.info(f"Trying fallback blocks_index from tree_files: {blocks_key}")
+                    result = await self._search_in_blocks_index(blocks_key, image_id)
+                    if result:
+                        return result
+
+        # 3. Fallback на старую логику (node_files crops)
         crops = []
         for doc_id in document_ids:
             crops.extend(await self.projects_db.get_document_crops(doc_id))
@@ -2249,6 +2284,26 @@ class AgentService:
                 if image_id in key:
                     return val
         return crop
+
+    async def _search_in_blocks_index(self, r2_key: str, image_id: str) -> Optional[Dict[str, Any]]:
+        """Найти crop_url в файле blocks_index."""
+        try:
+            data = await self._download_bytes(r2_key)
+            if not data:
+                return None
+
+            blocks_data = json.loads(data.decode("utf-8", errors="ignore"))
+            for block in blocks_data.get("blocks", []):
+                if block.get("id") == image_id and block.get("crop_url"):
+                    return {
+                        "crop_url": block["crop_url"],
+                        "r2_key": None,
+                        "page_index": block.get("page_index"),
+                        "block_type": block.get("block_type")
+                    }
+        except Exception as e:
+            logger.warning(f"Error parsing blocks_index {r2_key}: {e}")
+        return None
 
     async def _download_bytes(self, key: str) -> Optional[bytes]:
         data = await self.s3_client.download_bytes(key)

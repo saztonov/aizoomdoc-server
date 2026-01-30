@@ -159,7 +159,8 @@ class SupabaseProjectsClient:
         """
         Получить файл blocks_index из job_files для документа.
 
-        Связь: tree_nodes.id → jobs.node_id → job_files.job_id (file_type='blocks_index')
+        Связь: tree_nodes.id (документ) → tree_nodes.parent_id (дочерние файлы)
+               → jobs.node_id → job_files.job_id (file_type='blocks_index')
 
         Args:
             document_node_id: UUID узла документа
@@ -168,20 +169,37 @@ class SupabaseProjectsClient:
             dict с информацией о файле blocks_index (r2_key, file_name) или None
         """
         try:
-            # 1. Найти job по node_id
+            # 1. Найти дочерние узлы (файлы) документа
+            children_response = (
+                self.client.table("tree_nodes")
+                .select("id")
+                .eq("parent_id", str(document_node_id))
+                .execute()
+            )
+
+            if not children_response.data:
+                logger.debug(f"No child nodes for document {document_node_id}, trying direct search")
+                # Fallback: попробовать искать напрямую (для обратной совместимости)
+                return await self._get_blocks_index_direct(document_node_id)
+
+            child_node_ids = [child["id"] for child in children_response.data]
+            logger.debug(f"Found {len(child_node_ids)} child nodes for document {document_node_id}")
+
+            # 2. Найти jobs для дочерних узлов
             jobs_response = (
                 self.client.table("jobs")
                 .select("id")
-                .eq("node_id", str(document_node_id))
+                .in_("node_id", child_node_ids)
                 .execute()
             )
 
             if not jobs_response.data:
+                logger.debug(f"No jobs found for child nodes of {document_node_id}")
                 return None
 
             job_ids = [job["id"] for job in jobs_response.data]
 
-            # 2. Найти файл blocks_index в job_files
+            # 3. Найти файл blocks_index в job_files
             files_response = (
                 self.client.table("job_files")
                 .select("*")
@@ -192,12 +210,39 @@ class SupabaseProjectsClient:
             )
 
             if not files_response.data:
+                logger.debug(f"No blocks_index found in job_files for jobs of document {document_node_id}")
                 return None
 
+            logger.debug(f"Found blocks_index for document {document_node_id}: {files_response.data[0].get('r2_key')}")
             return files_response.data[0]
 
         except Exception as e:
-            logger.error(f"Error getting blocks_index for node: {e}")
+            logger.error(f"Error getting blocks_index for node {document_node_id}: {e}")
+            return None
+
+    async def _get_blocks_index_direct(self, node_id: UUID) -> Optional[dict]:
+        """Прямой поиск blocks_index (старая логика для обратной совместимости)."""
+        try:
+            jobs_response = (
+                self.client.table("jobs")
+                .select("id")
+                .eq("node_id", str(node_id))
+                .execute()
+            )
+            if not jobs_response.data:
+                return None
+
+            job_ids = [job["id"] for job in jobs_response.data]
+            files_response = (
+                self.client.table("job_files")
+                .select("*")
+                .in_("job_id", job_ids)
+                .eq("file_type", "blocks_index")
+                .limit(1)
+                .execute()
+            )
+            return files_response.data[0] if files_response.data else None
+        except Exception:
             return None
 
     async def search_documents(

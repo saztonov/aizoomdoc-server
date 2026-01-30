@@ -10,6 +10,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Never start the application automatically.** Only the user should launch the server (uvicorn, run.py, docker). Claude may provide commands but must not execute them without explicit user request.
 
+## Code in Responses Policy
+
+**Do not write code blocks in conversation text.** When discussing solutions or answering questions:
+- Describe the architecture and approach in natural language
+- Explain what needs to be changed and where
+- Reference files and line numbers for context
+- Write actual code only when editing files directly via tools
+
+This keeps responses focused on understanding and decision-making rather than copy-paste snippets.
+
 ## Development Commands
 
 ```bash

@@ -202,6 +202,7 @@ class LLMTokenEvent(BaseModel):
     """Событие токена от LLM."""
     token: str
     accumulated: str = Field(..., description="Накопленный текст")
+    model: Optional[str] = Field(None, description="Название модели (flash/pro)")
 
 
 class ToolCallEvent(BaseModel):
