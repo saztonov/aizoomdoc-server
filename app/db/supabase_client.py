@@ -491,6 +491,7 @@ class SupabaseClient:
                     "storage_path": storage_file.get("storage_path") if storage_file else None,
                     "external_url": storage_file.get("external_url") if storage_file else None,
                     "filename": storage_file.get("filename") if storage_file else None,
+                    "source_type": storage_file.get("source_type") if storage_file else None,
                 })
             
             return images

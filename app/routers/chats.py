@@ -162,16 +162,21 @@ async def get_chat_history(
             # Генерируем URL для изображения
             storage_path = img.get("storage_path")
             external_url = img.get("external_url")
-            
+            source_type = img.get("source_type")
+
             if external_url:
                 url = external_url
-            elif storage_path and settings.use_s3_dev_url and settings.s3_dev_url:
-                # Приоритет на S3_DEV_URL если включён
-                base_url = settings.s3_dev_url.rstrip('/')
-                url = f"{base_url}/{storage_path}"
-            elif storage_path and settings.r2_public_domain:
-                domain = settings.r2_public_domain.replace('https://', '').replace('http://', '')
-                url = f"https://{domain}/{storage_path}"
+            elif storage_path:
+                # Для projects_crop используем S3_PROJECTS_DEV_URL
+                if source_type == "projects_crop" and settings.s3_projects_dev_url:
+                    base_url = settings.s3_projects_dev_url.rstrip('/')
+                    url = f"{base_url}/{storage_path}"
+                elif settings.use_s3_dev_url and settings.s3_dev_url:
+                    # Для остальных файлов - S3_DEV_URL
+                    base_url = settings.s3_dev_url.rstrip('/')
+                    url = f"{base_url}/{storage_path}"
+                else:
+                    url = None
             else:
                 url = None
             
