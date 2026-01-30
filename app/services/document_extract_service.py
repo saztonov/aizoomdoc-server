@@ -27,7 +27,6 @@ class DocumentExtractService:
         selected_blocks: List[SelectedBlock],
         analysis_intent: Optional[AnalysisIntent] = None,
         model_name: Optional[str] = None,
-        max_chars: int = 18000,
     ) -> DocumentFacts:
         """
         Extract facts from selected blocks using a structured JSON schema.
@@ -37,9 +36,8 @@ class DocumentExtractService:
             user_message: Original user question.
             selected_blocks: Blocks selected by flash collector.
             analysis_intent: Optional intent guidance.
-            max_chars: Max input size for block context.
         """
-        context = self._build_context(selected_blocks, max_chars=max_chars)
+        context = self._build_context(selected_blocks)
         intent_text = ""
         if analysis_intent:
             intent_text = (
@@ -66,10 +64,9 @@ class DocumentExtractService:
             logger.warning(f"DocumentExtractService failed: {exc}")
             return DocumentFacts()
 
-    def _build_context(self, blocks: List[SelectedBlock], *, max_chars: int) -> str:
+    def _build_context(self, blocks: List[SelectedBlock]) -> str:
         """Build a compact context from blocks with id metadata."""
         parts: List[str] = []
-        total = 0
         for block in blocks:
             if block.block_kind not in ("TEXT", "TABLE"):
                 continue
@@ -78,9 +75,6 @@ class DocumentExtractService:
             if not body:
                 continue
             chunk = f"{header}{body}\n\n"
-            if total + len(chunk) > max_chars:
-                break
             parts.append(chunk)
-            total += len(chunk)
         return "".join(parts).strip()
 

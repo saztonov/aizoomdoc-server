@@ -1816,7 +1816,6 @@ class AgentService:
     async def _build_document_context(self, document_ids: List[UUID]) -> str:
         """Собрать контекст из MD/HTML файлов документа."""
         context_parts = []
-        max_chars_per_file = 20000
 
         for doc_id in document_ids:
             node = await self.projects_db.get_node_by_id(doc_id)
@@ -1847,9 +1846,6 @@ class AgentService:
                     # простая очистка HTML
                     text = re.sub(r"<[^>]+>", " ", text)
                     text = re.sub(r"\s+", " ", text).strip()
-
-                if len(text) > max_chars_per_file:
-                    text = text[:max_chars_per_file] + "\n[...TRUNCATED...]"
 
                 label = "MD" if file_type == "result_md" else "HTML_OCR"
                 context_parts.append(f"[{label}]:\n{text}\n")
@@ -1886,7 +1882,6 @@ class AgentService:
             return ""
 
         context_parts = []
-        max_chars_per_file = 2500000  # Увеличено для полных MD документов (было 30000)
 
         for file_info in tree_files:
             r2_key = file_info.get("r2_key")
@@ -1909,10 +1904,6 @@ class AgentService:
                     import re
                     text = re.sub(r"<[^>]+>", " ", text)
                     text = re.sub(r"\s+", " ", text).strip()
-
-                # Ограничиваем размер
-                if len(text) > max_chars_per_file:
-                    text = text[:max_chars_per_file] + "\n[...TRUNCATED...]"
 
                 # Определяем метку
                 file_name = Path(r2_key).name if r2_key else "unknown"
@@ -2002,7 +1993,7 @@ class AgentService:
                         continue
                     lines.append(f"- {block_id} (стр. {page_number})")
 
-        return "\n".join(lines[:500])
+        return "\n".join(lines[:10000])
 
     async def _handle_request_images(
         self,
