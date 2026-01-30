@@ -92,6 +92,7 @@ class MaterialImage(LLMBaseModel):
     height: Optional[int] = Field(default=None, ge=1, description="PNG height")
     scale_factor: Optional[float] = Field(default=None, ge=0.0, description="Preview scale factor")
     bbox_norm: Optional[BBoxNorm] = Field(default=None, description="ROI/quadrant bbox")
+    storage_file_id: Optional[str] = Field(default=None, description="ID of file in storage_files for linking to chat_images")
 
 
 class ExtractedTable(LLMBaseModel):

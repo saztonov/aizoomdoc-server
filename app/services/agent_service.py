@@ -704,6 +704,7 @@ class AgentService:
                 height=render.height,
                 scale_factor=render.scale_factor,
                 bbox_norm=render.bbox_norm,
+                storage_file_id=str(storage_file.id) if storage_file else None,
             )
 
         for req in requested_images:
@@ -1074,11 +1075,15 @@ class AgentService:
         if final_answer is None:
             raise RuntimeError("Failed to obtain final answer")
 
-        await self.supabase.add_message(
+        msg = await self.supabase.add_message(
             chat_id=chat_id,
             role="assistant",
             content=final_answer.answer_markdown,
         )
+
+        # Link rendered images to the message
+        if msg and materials_json:
+            await self._link_images_to_message(chat_id, msg.id, materials_json)
 
         yield StreamEvent(
             event="llm_final",
@@ -1338,11 +1343,15 @@ class AgentService:
         if final_answer is None:
             raise RuntimeError("Failed to obtain final compare answer")
 
-        await self.supabase.add_message(
+        msg = await self.supabase.add_message(
             chat_id=chat_id,
             role="assistant",
             content=final_answer.answer_markdown,
         )
+
+        # Link rendered images to the message
+        if msg and materials_json:
+            await self._link_images_to_message(chat_id, msg.id, materials_json)
 
         yield StreamEvent(
             event="llm_final",
@@ -1833,11 +1842,15 @@ class AgentService:
         if final_answer is None:
             raise RuntimeError("Failed to obtain final answer")
 
-        await self.supabase.add_message(
+        msg = await self.supabase.add_message(
             chat_id=chat_id,
             role="assistant",
             content=final_answer.answer_markdown,
         )
+
+        # Link rendered images to the message
+        if msg and materials_json:
+            await self._link_images_to_message(chat_id, msg.id, materials_json)
 
         yield StreamEvent(
             event="llm_final",
@@ -2040,6 +2053,31 @@ class AgentService:
                     lines.append(f"- {block_id} (стр. {page_number})")
 
         return "\n".join(lines[:10000])
+
+    async def _link_images_to_message(
+        self,
+        chat_id: UUID,
+        message_id: UUID,
+        materials_json: Optional[dict]
+    ) -> None:
+        """Link rendered images from materials_json to the message via chat_images."""
+        if not materials_json:
+            return
+
+        images = materials_json.get("images", [])
+        for img in images:
+            storage_file_id = img.get("storage_file_id")
+            if storage_file_id:
+                try:
+                    await self.supabase.add_chat_image(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        file_id=UUID(storage_file_id),
+                        image_type=img.get("kind", "render"),
+                        description=img.get("block_id")
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to link image {storage_file_id} to message: {e}")
 
     async def _handle_request_images(
         self,
