@@ -192,12 +192,14 @@ class AgentService:
             if self._has_html_files(google_file_uris):
                 llm_logger.log_line("HTML attachment detected (text/html).")
             # Сохраняем сообщение пользователя в БД (если нужно)
+            user_msg = None
             if save_user_message:
-                await self.supabase.add_message(
+                user_msg = await self.supabase.add_message(
                     chat_id=chat_id,
                     role="user",
                     content=user_message
                 )
+            user_message_id = user_msg.id if user_msg else None
             
             context_text = ""
 
@@ -208,6 +210,7 @@ class AgentService:
                     document_ids_a=compare_document_ids_a,
                     document_ids_b=compare_document_ids_b,
                     llm_logger=llm_logger,
+                    user_message_id=user_message_id,
                 ):
                     yield event
                 yield StreamEvent(
@@ -268,6 +271,7 @@ class AgentService:
                     client_id=client_id,
                     google_file_uris=google_file_uris,
                     llm_logger=llm_logger,
+                    user_message_id=user_message_id,
                 ):
                     yield event
             else:  # complex
@@ -276,6 +280,7 @@ class AgentService:
                     document_ids=document_ids,
                     google_file_uris=google_file_uris,
                     llm_logger=llm_logger,
+                    user_message_id=user_message_id,
                 ):
                     yield event
             
@@ -853,6 +858,7 @@ class AgentService:
         client_id: Optional[str] = None,
         google_file_uris: Optional[List[str]] = None,
         llm_logger: Optional[LLMDialogLogger] = None,
+        user_message_id: Optional[UUID] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Обработка в simple (flash-only) режиме со строгим JSON."""
 
@@ -1081,9 +1087,9 @@ class AgentService:
             content=final_answer.answer_markdown,
         )
 
-        # Link rendered images to the message
-        if msg and materials_json:
-            await self._link_images_to_message(chat_id, msg.id, materials_json)
+        # Link rendered images to user message (so they appear before assistant response)
+        if user_message_id and materials_json:
+            await self._link_images_to_message(chat_id, user_message_id, materials_json)
 
         yield StreamEvent(
             event="llm_final",
@@ -1099,6 +1105,7 @@ class AgentService:
         document_ids_a: List[UUID],
         document_ids_b: List[UUID],
         llm_logger: Optional[LLMDialogLogger] = None,
+        user_message_id: Optional[UUID] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Compare two document sets (Flash collector -> Pro answer)."""
 
@@ -1349,9 +1356,9 @@ class AgentService:
             content=final_answer.answer_markdown,
         )
 
-        # Link rendered images to the message
-        if msg and materials_json:
-            await self._link_images_to_message(chat_id, msg.id, materials_json)
+        # Link rendered images to user message (so they appear before assistant response)
+        if user_message_id and materials_json:
+            await self._link_images_to_message(chat_id, user_message_id, materials_json)
 
         yield StreamEvent(
             event="llm_final",
@@ -1528,6 +1535,7 @@ class AgentService:
         document_ids: Optional[List[UUID]] = None,
         google_file_uris: Optional[List[str]] = None,
         llm_logger: Optional[LLMDialogLogger] = None,
+        user_message_id: Optional[UUID] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Обработка в complex (flash+pro) режиме со строгим JSON."""
 
@@ -1701,6 +1709,7 @@ class AgentService:
             # Получаем ответ LLM со стримингом токенов
             accumulated_text = ""
             accumulated_thinking = ""
+            prev_display_text = ""  # Для вычисления delta markdown
             raw_text = ""  # Инициализируем для безопасности
             model_name = settings.default_pro_model or settings.default_model
             async for chunk in self.llm_service.stream_answer(
@@ -1723,9 +1732,12 @@ class AgentService:
                     accumulated_text += content
                     # Извлекаем answer_markdown из частичного JSON для отображения
                     display_text = extract_answer_markdown(accumulated_text)
+                    # Вычисляем инкремент markdown (delta) вместо сырого JSON токена
+                    token_delta = display_text[len(prev_display_text):] if len(display_text) > len(prev_display_text) else ""
+                    prev_display_text = display_text
                     yield StreamEvent(
                         event="llm_token",
-                        data=LLMTokenEvent(token=content, accumulated=display_text, model="pro").dict(),
+                        data=LLMTokenEvent(token=token_delta, accumulated=display_text, model="pro").dict(),
                         timestamp=datetime.utcnow()
                     )
                 elif chunk_type == "done":
@@ -1848,9 +1860,9 @@ class AgentService:
             content=final_answer.answer_markdown,
         )
 
-        # Link rendered images to the message
-        if msg and materials_json:
-            await self._link_images_to_message(chat_id, msg.id, materials_json)
+        # Link rendered images to user message (so they appear before assistant response)
+        if user_message_id and materials_json:
+            await self._link_images_to_message(chat_id, user_message_id, materials_json)
 
         yield StreamEvent(
             event="llm_final",
