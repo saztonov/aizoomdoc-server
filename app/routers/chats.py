@@ -158,11 +158,13 @@ async def get_chat_history(
         images_data = await supabase.get_message_images(msg.id)
         
         images = []
+        logger.info(f"Message {msg.id}: found {len(images_data)} images")
         for img in images_data:
             # Генерируем URL для изображения
             storage_path = img.get("storage_path")
             external_url = img.get("external_url")
             source_type = img.get("source_type")
+            logger.info(f"  Image: storage_path={storage_path}, external_url={external_url}, source_type={source_type}")
 
             if external_url:
                 url = external_url
@@ -179,7 +181,8 @@ async def get_chat_history(
                     url = None
             else:
                 url = None
-            
+
+            logger.info(f"  Generated URL: {url}")
             images.append(MessageImage(
                 id=img.get("id"),
                 file_id=img.get("file_id"),
