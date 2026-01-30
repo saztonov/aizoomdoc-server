@@ -1038,7 +1038,7 @@ class AgentService:
 
         yield StreamEvent(
             event="llm_final",
-            data={"content": final_answer.answer_markdown, "answer_json": final_answer.model_dump()},
+            data={"content": final_answer.answer_markdown, "model": "flash"},
             timestamp=datetime.utcnow()
         )
 
@@ -1302,10 +1302,10 @@ class AgentService:
 
         yield StreamEvent(
             event="llm_final",
-            data={"content": final_answer.answer_markdown, "answer_json": final_answer.model_dump()},
+            data={"content": final_answer.answer_markdown, "model": "flash"},
             timestamp=datetime.utcnow()
         )
-    
+
     async def _fetch_and_upload_images(
         self,
         image_ids: List[str],
@@ -1795,10 +1795,10 @@ class AgentService:
 
         yield StreamEvent(
             event="llm_final",
-            data={"content": final_answer.answer_markdown, "answer_json": final_answer.model_dump()},
+            data={"content": final_answer.answer_markdown, "model": "pro"},
             timestamp=datetime.utcnow()
         )
-    
+
     def _format_search_context(self, search_result: SearchResult) -> str:
         """Форматировать результаты поиска в текстовый контекст."""
         context = f"НАЙДЕННЫЙ ТЕКСТ:\n\n"
@@ -2022,10 +2022,23 @@ class AgentService:
                 continue
 
             # Приоритет: crop_url из blocks_index → r2_key из node_files
-            storage_path = crop.get("crop_url") or crop.get("r2_key")
-            if not storage_path:
+            crop_url = crop.get("crop_url")
+            r2_key = crop.get("r2_key")
+
+            # Определяем, является ли crop_url полным URL или ключом R2
+            if crop_url and crop_url.startswith("http"):
+                # Полный URL — сохраняем как external_url
+                storage_path = None
+                external_url = crop_url
+                file_name = crop.get("file_name") or Path(crop_url.split("/")[-1]).name
+            elif crop_url or r2_key:
+                # Относительный ключ — сохраняем как storage_path
+                storage_path = crop_url or r2_key
+                external_url = None
+                file_name = crop.get("file_name") or Path(storage_path).name
+            else:
                 continue
-            file_name = crop.get("file_name") or Path(storage_path).name
+
             mime = crop.get("mime_type") or ("application/pdf" if file_name.endswith(".pdf") else "image/png")
 
             # Создаём запись storage_files
@@ -2035,6 +2048,7 @@ class AgentService:
                 mime_type=mime,
                 size_bytes=crop.get("file_size") or 0,
                 storage_path=storage_path,
+                external_url=external_url,
                 source_type="projects_crop"
             )
 
@@ -2297,22 +2311,35 @@ class AgentService:
         return None
 
     async def _download_bytes(self, key: str) -> Optional[bytes]:
+        """Скачать файл по ключу. Для tree_docs использует Projects URL."""
+        # Сначала пробуем через S3 клиент (если есть прямой доступ)
         data = await self.s3_client.download_bytes(key)
         if data:
             return data
-        url = self._build_public_url(key)
+        # Для файлов дерева (tree_docs) используем Projects URL
+        if key.startswith("tree_docs/"):
+            url = self._build_projects_public_url(key)
+        else:
+            url = self._build_public_url(key)
         if url:
             return await self._download_public(url)
         return None
 
     def _build_public_url(self, key: str) -> Optional[str]:
-        """Публичная ссылка на файл в R2/S3."""
+        """Публичная ссылка на файл в R2/S3 (для файлов чата)."""
         if settings.use_s3_dev_url and settings.s3_dev_url:
             return f"{settings.s3_dev_url.rstrip('/')}/{key}"
         if settings.r2_public_domain:
             domain = settings.r2_public_domain.replace("https://", "").replace("http://", "")
             return f"https://{domain}/{key}"
         return None
+
+    def _build_projects_public_url(self, key: str) -> Optional[str]:
+        """Публичная ссылка на файл в Projects R2 (tree_docs)."""
+        if settings.s3_projects_dev_url:
+            return f"{settings.s3_projects_dev_url.rstrip('/')}/{key}"
+        # Fallback на обычный URL, если projects URL не задан
+        return self._build_public_url(key)
 
     async def _download_public(self, url: str) -> Optional[bytes]:
         try:

@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     )
     r2_public_domain: str = Field(default="", alias="R2_PUBLIC_DOMAIN")
     s3_dev_url: str = Field(default="", alias="S3_DEV_URL")
+    s3_projects_dev_url: str = Field(default="", alias="S3_PROJECTS_DEV_URL")
     use_s3_dev_url: bool = Field(default=False, alias="USE_S3_DEV_URL")
     
     # LLM
