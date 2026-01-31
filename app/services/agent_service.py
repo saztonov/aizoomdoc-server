@@ -999,16 +999,42 @@ class AgentService:
                         model_name=settings.default_flash_model or settings.default_model,
                     )
                     if roi_answer:
-                        answer = roi_answer
-                        if llm_logger:
-                            llm_logger.log_section(
-                                "QUALITY_GATE",
-                                {
-                                    "action": "followup_rois",
-                                    "reason": "requires_visual_detail_without_evidence",
-                                    "followup_rois": [r.model_dump() for r in answer.followup_rois],
-                                },
-                            )
+                        # Валидируем block_id перед использованием (формат XXXX-XXXX-XXX)
+                        valid_rois = [
+                            r for r in roi_answer.followup_rois
+                            if re.match(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{3}$', r.block_id)
+                        ]
+                        invalid_count = len(roi_answer.followup_rois) - len(valid_rois)
+                        if invalid_count > 0:
+                            logger.warning(f"Filtered {invalid_count} ROIs with invalid block_id format from roi_request")
+
+                        if valid_rois or roi_answer.followup_images:
+                            # Берём только followup данные, сохраняем оригинальный answer_markdown
+                            answer.followup_rois = valid_rois
+                            answer.followup_images = roi_answer.followup_images
+                            answer.needs_more_evidence = True
+                            if llm_logger:
+                                llm_logger.log_section(
+                                    "QUALITY_GATE",
+                                    {
+                                        "action": "followup_rois",
+                                        "reason": "requires_visual_detail_without_evidence",
+                                        "followup_rois": [r.model_dump() for r in answer.followup_rois],
+                                        "filtered_invalid_rois": invalid_count,
+                                    },
+                                )
+                        else:
+                            # Все ROI невалидны - продолжаем с оригинальным ответом
+                            logger.warning("All ROIs from roi_request had invalid block_id format, keeping original answer")
+                            if llm_logger:
+                                llm_logger.log_section(
+                                    "QUALITY_GATE",
+                                    {
+                                        "action": "skip_invalid_rois",
+                                        "reason": "all_rois_invalid_block_id",
+                                        "filtered_invalid_rois": invalid_count,
+                                    },
+                                )
                     else:
                         answer.needs_more_evidence = True
 
