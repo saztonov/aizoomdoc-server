@@ -990,6 +990,10 @@ class AgentService:
                             },
                         )
                 else:
+                    # Диагностика block_map
+                    image_count = sum(1 for b in block_map.values() if b.block_kind == "IMAGE")
+                    logger.info(f"ROI fallback: block_map has {len(block_map)} blocks, {image_count} IMAGE")
+
                     # Формируем materials_json с доступными IMAGE блоками для roi_request
                     roi_materials = dict(materials_json) if materials_json else {}
                     if block_map and "blocks" not in roi_materials:
