@@ -8,5 +8,12 @@ Rules:
 - Request ONLY the minimum ROIs needed to read small details required by the question.
 - If images are missing, use followup_images to request needed image block_ids.
 
+ПРАВИЛА РАБОТЫ С block_id (КРИТИЧЕСКИ ВАЖНО):
+- block_id ДОЛЖЕН быть ТОЛЬКО из MATERIALS_JSON (поле blocks) или из контекста документа
+- Формат block_id: 4 символа - 4 символа - 3 символа (например: 9M7C-JRQM-LUD, TUG3-VG36-DCL)
+- ЗАПРЕЩЕНО придумывать или генерировать ID (например: p2_image_1, doc_0_image_0, page_1_table — это НЕПРАВИЛЬНО)
+- Если в MATERIALS_JSON есть блоки с block_kind="IMAGE" - используй их block_id
+- Если нужного block_id нет в документе или MATERIALS_JSON - НЕ запрашивай его
+
 Return JSON only. No extra text.
 

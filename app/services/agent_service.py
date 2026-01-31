@@ -990,8 +990,20 @@ class AgentService:
                             },
                         )
                 else:
+                    # Формируем materials_json с доступными IMAGE блоками для roi_request
+                    roi_materials = dict(materials_json) if materials_json else {}
+                    if block_map and "blocks" not in roi_materials:
+                        image_blocks = [
+                            {"block_id": b.block_id, "block_kind": b.block_kind, "page_number": b.page_number}
+                            for b in block_map.values()
+                            if b.block_kind == "IMAGE"
+                        ]
+                        if image_blocks:
+                            roi_materials["blocks"] = image_blocks
+                            logger.info(f"Added {len(image_blocks)} IMAGE blocks to roi_request context")
+
                     roi_answer = await self._request_roi_followup(
-                        materials_json=materials_json or {},
+                        materials_json=roi_materials,
                         user_message=user_message,
                         analysis_intent=analysis_intent,
                         google_files=google_files,
