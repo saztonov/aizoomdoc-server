@@ -1,0 +1,29 @@
+services:
+  aizoomdoc-server:
+    build: .
+    container_name: aizoomdoc-server
+    # Bind только на localhost - nginx проксирует снаружи
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Volumes для персистентных данных (без монтирования исходников)
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Ограничение ресурсов
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
