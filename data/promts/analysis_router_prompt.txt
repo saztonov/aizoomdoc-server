@@ -3,6 +3,11 @@ Return ONLY a strict JSON object that matches the AnalysisIntent schema.
 
 Rules:
 - intent_type: general_analysis | element_count | mixed | comparison | unknown
+  * general_analysis: общий инженерный анализ документа
+  * element_count: подсчёт элементов (труб, люков, помещений и т.д.)
+  * mixed: комбинация анализа и подсчёта
+  * comparison: сравнение двух документов или версий
+  * unknown: намерение не определено
 - requires_visual_detail: true ONLY if answering requires reading small labels/axes/dimensions/positions/table values.
 - focus_areas: 2-5 short phrases to prioritize in analysis.
 - confidence: 0..1, rationale: short explanation.

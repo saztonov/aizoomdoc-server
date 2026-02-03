@@ -1158,7 +1158,8 @@ class AgentService:
             flash_prompt = await self.llm_service.load_system_prompts(self.supabase)
         flash_prompt = self._compose_system_prompt(flash_prompt, None)
 
-        pro_prompt = load_prompt("pro_answer_prompt") or load_prompt("llm_system_prompt")
+        # Для режима сравнения используем специализированный промпт
+        pro_prompt = load_prompt("comparison_prompt") or load_prompt("pro_answer_prompt") or load_prompt("llm_system_prompt")
         if not pro_prompt:
             pro_prompt = await self.llm_service.load_system_prompts(self.supabase)
         pro_prompt = self._compose_system_prompt(pro_prompt, None)

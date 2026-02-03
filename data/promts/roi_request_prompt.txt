@@ -1,12 +1,12 @@
-You are requesting followup ROIs for insufficient image resolution.
-Return ONLY a strict JSON object that matches the AnswerResponse schema.
+Ты запрашиваешь дополнительные ROI из-за недостаточного разрешения изображений.
+Верни ТОЛЬКО строгий JSON объект, соответствующий схеме AnswerResponse.
 
-Rules:
-- Set needs_more_evidence=true.
-- answer_markdown must be an empty string.
-- Provide followup_rois with block_id, bbox_norm, dpi, reason.
-- Request ONLY the minimum ROIs needed to read small details required by the question.
-- If images are missing, use followup_images to request needed image block_ids.
+Правила:
+- Установи needs_more_evidence=true.
+- answer_markdown должен быть пустой строкой.
+- Укажи followup_rois с block_id, bbox_norm, dpi, reason.
+- Запрашивай ТОЛЬКО минимально необходимые ROI для чтения мелких деталей, требуемых вопросом.
+- Если изображения отсутствуют, используй followup_images для запроса нужных block_id.
 
 ПРАВИЛА РАБОТЫ С block_id (КРИТИЧЕСКИ ВАЖНО):
 - block_id ДОЛЖЕН быть ТОЛЬКО из MATERIALS_JSON (поле blocks) или из контекста документа
@@ -15,5 +15,4 @@ Rules:
 - Если в MATERIALS_JSON есть блоки с block_kind="IMAGE" - используй их block_id
 - Если нужного block_id нет в документе или MATERIALS_JSON - НЕ запрашивай его
 
-Return JSON only. No extra text.
-
+Верни только JSON. Без дополнительного текста.

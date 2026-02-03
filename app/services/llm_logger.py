@@ -28,7 +28,17 @@ class LLMDialogLogger:
             log_dir = Path(__file__).parent.parent.parent / settings.llm_log_dir
         log_dir.mkdir(parents=True, exist_ok=True)
         self.path = log_dir / f"llm_dialog_{chat_id}.log"
-        logger.info(f"LLM dialog log initialized: {self.path}")
+
+        # Проверяем возможность записи
+        if self.enabled:
+            try:
+                test_file = log_dir / ".write_test"
+                test_file.touch()
+                test_file.unlink()
+                logger.info(f"LLM dialog log initialized: {self.path}")
+            except Exception as e:
+                logger.error(f"Cannot write to log directory {log_dir}: {e}")
+                self.enabled = False
 
     def _timestamp(self) -> str:
         return datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -53,8 +63,8 @@ class LLMDialogLogger:
                 f.write(f"\n[{self._timestamp()}] {'=' * 20} {title} {'=' * 20}\n")
                 f.write(self._format(content))
                 f.write("\n")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to write LLM log section: {e}")
 
     def log_line(self, text: str) -> None:
         if not self.enabled:
@@ -62,8 +72,8 @@ class LLMDialogLogger:
         try:
             with self.path.open("a", encoding="utf-8") as f:
                 f.write(f"[{self._timestamp()}] {text}\n")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to write LLM log line: {e}")
 
     def log_request(
         self,

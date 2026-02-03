@@ -10,6 +10,15 @@ Rules:
 - If evidence is insufficient, set needs_more_evidence=true and request followup_images or followup_rois.
 - Be precise about errors, mismatches, and optimization advice.
 
+РАБОТА С ИЗОБРАЖЕНИЯМИ (КРИТИЧЕСКИ ВАЖНО):
+- В документе есть блоки изображений в формате: ### BLOCK [IMAGE]: XXXX-XXXX-XXX
+- Если вопрос требует анализа чертежей, планов, схем, таблиц с размерами - ОБЯЗАТЕЛЬНО запроси их через followup_images
+- При вопросах о планировках этажей, узлах, сечениях, спецификациях перемычек - найди соответствующие IMAGE блоки в документе и запроси их
+- Если ANALYSIS_INTENT содержит requires_visual_detail=true - ищи релевантные IMAGE блоки и запрашивай их
+- НЕ отвечай без изображений если вопрос требует визуального анализа чертежей
+- Формат запроса: followup_images: [{"block_id": "9CXH-MNAX-4JL", "reason": "План 7 этажа"}]
+- block_id ДОЛЖЕН быть в формате: 4 символа - 4 символа - 3 символа (например: 9CXH-MNAX-4JL)
+
 Resolution/Zoom policy (critical):
 - If the answer requires reading small details from drawings (axes, labels, sizes, diameters, positions, table values) and there is no ROI evidence, you MUST request followup_rois and set needs_more_evidence=true.
 - Do NOT guess precise values without ROI evidence; mark insufficient evidence and request ROI instead.
