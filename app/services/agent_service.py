@@ -561,6 +561,8 @@ class AgentService:
         block_map: Dict[str, Any],
         query: str,
         max_add: int = 10,
+        source_doc_id: Optional[str] = None,
+        source_doc_name: Optional[str] = None,
     ) -> FlashCollectorResponse:
         selected_ids = {b.block_id for b in flash_response.selected_blocks}
         linked_ids = self.search_service.find_linked_blocks(selected_ids, block_map)
@@ -589,6 +591,8 @@ class AgentService:
                 page_number=max(1, block.page_number),
                 content_raw=block.content_raw,
                 linked_block_ids=block.linked_block_ids,
+                source_doc_id=source_doc_id,
+                source_doc_name=source_doc_name,
             )
 
         for block_id in linked_ids:
@@ -633,6 +637,8 @@ class AgentService:
                     page_number=parsed.page_number,
                     content_raw=parsed.content_raw,
                     linked_block_ids=parsed.linked_block_ids,
+                    source_doc_id=getattr(parsed, "source_doc_id", None),
+                    source_doc_name=getattr(parsed, "source_doc_name", None),
                 )
 
         materials_images: List[MaterialImage] = []
@@ -891,6 +897,8 @@ class AgentService:
 
         combined_blocks: List[SelectedBlock] = []
         for payload in payloads:
+            doc_id = payload.get("doc_id")
+            doc_name = payload.get("doc_name")
             for block in payload.get("blocks", []):
                 combined_blocks.append(
                     SelectedBlock(
@@ -899,6 +907,8 @@ class AgentService:
                         page_number=max(1, block.page_number),
                         content_raw=block.content_raw,
                         linked_block_ids=block.linked_block_ids,
+                        source_doc_id=doc_id,
+                        source_doc_name=doc_name,
                     )
                 )
 
@@ -1183,13 +1193,15 @@ class AgentService:
         combined_images: List[ImageRequest] = []
         combined_rois: List[ROIRequest] = []
 
-        def label_block(block: SelectedBlock, label: str) -> SelectedBlock:
+        def label_block(block: SelectedBlock, label: str, doc_id: str, doc_name: str) -> SelectedBlock:
             return SelectedBlock(
                 block_id=block.block_id,
                 block_kind=block.block_kind,
                 page_number=max(1, block.page_number),
                 content_raw=f"[{label}]\n{block.content_raw}",
                 linked_block_ids=block.linked_block_ids,
+                source_doc_id=doc_id,
+                source_doc_name=doc_name,
             )
 
         block_map: Dict[str, Any] = {}
@@ -1219,24 +1231,28 @@ class AgentService:
                         response_text=raw_text,
                     )
                 flash_resp = FlashCollectorResponse.model_validate(flash_dict)
+                doc_id = payload.get("doc_id")
+                doc_name = payload.get("doc_name")
                 flash_resp = self._apply_coverage_check(
                     flash_response=flash_resp,
                     block_map=payload.get("block_map", {}),
                     query=user_message,
                     max_add=10,
+                    source_doc_id=doc_id,
+                    source_doc_name=doc_name,
                 )
                 if llm_logger:
                     llm_logger.log_section(
                         "COVERAGE_CHECK",
                         {
-                            "doc_id": payload.get("doc_id"),
+                            "doc_id": doc_id,
                             "selected_blocks": len(flash_resp.selected_blocks),
                             "requested_images": len(flash_resp.requested_images),
                             "requested_rois": len(flash_resp.requested_rois),
                         },
                     )
-                label = f"{label_prefix}: {payload.get('doc_name')} ({payload.get('doc_id')})"
-                combined_blocks.extend([label_block(b, label) for b in flash_resp.selected_blocks])
+                label = f"{label_prefix}: {doc_name} ({doc_id})"
+                combined_blocks.extend([label_block(b, label, doc_id, doc_name) for b in flash_resp.selected_blocks])
                 combined_images.extend(flash_resp.requested_images)
                 combined_rois.extend(flash_resp.requested_rois)
 
@@ -1247,6 +1263,8 @@ class AgentService:
                         page_number=max(1, block.page_number),
                         content_raw=f"[{label}]\n{block.content_raw}",
                         linked_block_ids=block.linked_block_ids,
+                        source_doc_id=doc_id,
+                        source_doc_name=doc_name,
                     )
 
         await collect(payloads_a, "DOC_A")
@@ -1648,17 +1666,25 @@ class AgentService:
                         response_text=raw_text,
                     )
                 flash_resp = FlashCollectorResponse.model_validate(flash_dict)
+                doc_id = payload.get("doc_id")
+                doc_name = payload.get("doc_name")
+                # Добавляем информацию об источнике документа к каждому блоку от Flash
+                for block in flash_resp.selected_blocks:
+                    block.source_doc_id = doc_id
+                    block.source_doc_name = doc_name
                 flash_resp = self._apply_coverage_check(
                     flash_response=flash_resp,
                     block_map=payload.get("block_map", {}),
                     query=user_message,
                     max_add=10,
+                    source_doc_id=doc_id,
+                    source_doc_name=doc_name,
                 )
                 if llm_logger:
                     llm_logger.log_section(
                         "COVERAGE_CHECK",
                         {
-                            "doc_id": payload.get("doc_id"),
+                            "doc_id": doc_id,
                             "selected_blocks": len(flash_resp.selected_blocks),
                             "requested_images": len(flash_resp.requested_images),
                             "requested_rois": len(flash_resp.requested_rois),

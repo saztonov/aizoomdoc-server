@@ -28,6 +28,8 @@ class SelectedBlock(LLMBaseModel):
     page_number: int = Field(..., ge=1, description="Page number")
     content_raw: str = Field(..., description="Full block content")
     linked_block_ids: List[str] = Field(default_factory=list, description="Linked block IDs")
+    source_doc_id: Optional[str] = Field(default=None, description="Source document UUID")
+    source_doc_name: Optional[str] = Field(default=None, description="Source document name")
 
 
 class ImageRequest(LLMBaseModel):
