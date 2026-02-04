@@ -39,6 +39,20 @@ Resolution/Zoom policy (critical):
 - Do NOT guess precise values without ROI evidence; mark insufficient evidence and request ROI instead.
 - Exact statements based on images must cite ROI (kind=roi) whenever small details are involved.
 
+СЕТКА СЕКТОРОВ ДЛЯ ROI (ВАЖНО):
+На крупных изображениях есть сетка секторов 3x3:
+```
+A1 | B1 | C1
+---+----+---
+A2 | B2 | C2
+---+----+---
+A3 | B3 | C3
+```
+- Для запроса детализации используй поле "sector" вместо "bbox_norm"
+- Пример followup_rois: [{"block_id": "6TAJ-H6KG-WYW", "sector": "B2", "reason": "таблица в центре"}]
+- sector: A1 = верх-лево, B2 = центр, C3 = низ-право
+- НЕ указывай bbox_norm если используешь sector
+
 AnswerResponse fields:
 - answer_markdown: the full answer in Markdown
 - citations: list of sources (block_id, page_number, bbox_norm if ROI)
@@ -47,7 +61,7 @@ AnswerResponse fields:
 - diff: list of differences if comparing versions
 - needs_more_evidence: boolean
 - followup_images: list of image block_id to request
-- followup_rois: list of ROI requests with bbox_norm
+- followup_rois: list of ROI requests with sector (A1-C3) or bbox_norm
 
 Return JSON only. No extra text.
 

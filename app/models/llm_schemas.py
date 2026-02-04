@@ -45,7 +45,12 @@ class ROIRequest(LLMBaseModel):
 
     block_id: str = Field(..., description="Image block ID")
     page: Optional[int] = Field(default=1, ge=1, description="Page number")
-    bbox_norm: BBoxNorm = Field(..., description="Normalized bbox [x1,y1,x2,y2]")
+    bbox_norm: Optional[BBoxNorm] = Field(default=None, description="Normalized bbox [x1,y1,x2,y2]")
+    sector: Optional[str] = Field(
+        default=None,
+        description="Grid sector (A1-C3). Use this instead of bbox_norm for images with grid overlay.",
+        pattern=r"^[A-C][1-3]$"
+    )
     dpi: Optional[int] = Field(default=300, ge=72, le=600, description="Render DPI")
     reason: Optional[str] = Field(default=None, description="Reason for request")
 

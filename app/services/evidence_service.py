@@ -16,7 +16,7 @@ from io import BytesIO
 from typing import Iterable, Optional, Tuple
 
 import fitz  # PyMuPDF
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from app.config import settings
 from app.services.render_cache import get_render_cache, RenderCacheManager
@@ -51,6 +51,70 @@ class EvidenceService:
     def _compute_content_hash(self, pdf_bytes: bytes) -> str:
         """Compute SHA256 hash of PDF content as fallback version."""
         return hashlib.sha256(pdf_bytes).hexdigest()[:16]
+
+    def _draw_grid_overlay(self, img: Image.Image, grid_size: int = 3) -> Image.Image:
+        """
+        Добавляет на изображение сетку секторов A1-C3.
+
+        Args:
+            img: Исходное изображение
+            grid_size: Размер сетки (3 = 3x3 = A1-C3)
+
+        Returns:
+            Изображение с наложенной сеткой
+        """
+        # Конвертируем в RGBA если нужно
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+        else:
+            img = img.copy()
+
+        overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        draw = ImageDraw.Draw(overlay)
+        w, h = img.size
+
+        # Размеры ячеек
+        cell_w = w / grid_size
+        cell_h = h / grid_size
+
+        # Рисуем линии сетки (полупрозрачные красные)
+        line_color = (255, 0, 0, 100)
+        line_width = max(2, min(w, h) // 500)
+        for i in range(1, grid_size):
+            x = int(i * cell_w)
+            y = int(i * cell_h)
+            draw.line([(x, 0), (x, h)], fill=line_color, width=line_width)
+            draw.line([(0, y), (w, y)], fill=line_color, width=line_width)
+
+        # Подписи секторов
+        try:
+            font_size = max(20, min(w, h) // 15)
+            font = ImageFont.truetype("arial.ttf", size=font_size)
+        except Exception:
+            font = ImageFont.load_default()
+
+        labels = ["A", "B", "C"][:grid_size]
+        text_color = (255, 0, 0, 200)
+        bg_color = (255, 255, 255, 180)
+
+        for row in range(grid_size):
+            for col in range(grid_size):
+                label = f"{labels[col]}{row + 1}"
+                cx = int((col + 0.5) * cell_w)
+                cy = int((row + 0.5) * cell_h)
+
+                # Белый фон под текстом для читаемости
+                bbox = draw.textbbox((cx, cy), label, font=font, anchor="mm")
+                padding = 4
+                draw.rectangle(
+                    [bbox[0] - padding, bbox[1] - padding, bbox[2] + padding, bbox[3] + padding],
+                    fill=bg_color
+                )
+                draw.text((cx, cy), label, fill=text_color, font=font, anchor="mm")
+
+        # Накладываем overlay на изображение
+        result = Image.alpha_composite(img, overlay)
+        return result.convert("RGB")
 
     def render_pdf_page(
         self,
@@ -165,6 +229,12 @@ class EvidenceService:
         w, h = base_img.size
 
         preview_img, scale_factor = self._scale_to_max_side(base_img, settings.preview_max_side)
+
+        # Добавляем сетку секторов A1-C3 только для крупных изображений
+        # (scale_factor > 1.0 означает что оригинал был уменьшен и детали потеряны)
+        if scale_factor > 1.0:
+            preview_img = self._draw_grid_overlay(preview_img, grid_size=3)
+
         preview_bytes = self._to_png_bytes(preview_img)
         results = [
             RenderedImage(

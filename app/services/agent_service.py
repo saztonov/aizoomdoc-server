@@ -54,6 +54,45 @@ def load_prompt(name: str) -> str:
     return ""
 
 
+def _sector_to_bbox(sector: str, grid_size: int = 3) -> list[float]:
+    """
+    Преобразует сектор сетки (A1-C3) в нормализованные координаты bbox_norm.
+
+    Args:
+        sector: Сектор в формате A1-C3 (колонка + ряд)
+        grid_size: Размер сетки (3 = 3x3)
+
+    Returns:
+        Нормализованные координаты [x1, y1, x2, y2]
+    """
+    col_map = {"A": 0, "B": 1, "C": 2}
+    if len(sector) != 2:
+        return [0.0, 0.0, 1.0, 1.0]
+
+    col_char = sector[0].upper()
+    row_char = sector[1]
+
+    col = col_map.get(col_char, 0)
+    try:
+        row = int(row_char) - 1
+    except ValueError:
+        row = 0
+
+    # Ограничиваем значения размером сетки
+    col = max(0, min(col, grid_size - 1))
+    row = max(0, min(row, grid_size - 1))
+
+    cell_w = 1.0 / grid_size
+    cell_h = 1.0 / grid_size
+
+    x1 = col * cell_w
+    y1 = row * cell_h
+    x2 = (col + 1) * cell_w
+    y2 = (row + 1) * cell_h
+
+    return [x1, y1, x2, y2]
+
+
 def extract_answer_markdown(partial_json: str) -> str:
     """
     Извлечь значение answer_markdown из частичного JSON.
@@ -947,8 +986,38 @@ class AgentService:
                 dpi = 72
             if dpi > 400:
                 dpi = 400
+
+            # Определяем bbox_norm: приоритет sector -> bbox_norm -> fallback на квадранты
+            bbox = roi.bbox_norm
+            if not bbox and roi.sector:
+                # Конвертируем сектор сетки (A1-C3) в координаты
+                bbox = _sector_to_bbox(roi.sector)
+                if llm_logger:
+                    llm_logger.log_section("SECTOR_TO_BBOX", {
+                        "block_id": roi.block_id,
+                        "sector": roi.sector,
+                        "bbox_norm": bbox,
+                    })
+
+            if not bbox:
+                # Fallback: если нет ни sector ни bbox_norm, генерируем квадранты
+                logger.info(f"No bbox/sector for ROI {roi.block_id}, generating quadrants")
+                if llm_logger:
+                    llm_logger.log_section("ROI_FALLBACK_QUADRANTS", {
+                        "block_id": roi.block_id,
+                        "reason": "No bbox_norm or sector provided",
+                    })
+                renders = self.evidence_service.build_preview_and_quadrants(
+                    pdf_bytes, source_id=cache_key or roi.block_id, page=page_index, dpi=dpi
+                )
+                for render in renders:
+                    material = await upload_render(roi.block_id, render)
+                    if material:
+                        materials_images.append(material)
+                continue
+
             render = self.evidence_service.build_roi(
-                pdf_bytes, source_id=cache_key or roi.block_id, bbox_norm=roi.bbox_norm, page=page_index, dpi=dpi
+                pdf_bytes, source_id=cache_key or roi.block_id, bbox_norm=bbox, page=page_index, dpi=dpi
             )
             material = await upload_render(roi.block_id, render)
             if material:
