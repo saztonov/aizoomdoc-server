@@ -340,16 +340,167 @@ class SupabaseClient:
         """Получить чат по ID."""
         try:
             response = self.client.table("chats").select("*").eq("id", str(chat_id)).execute()
-            
+
             if not response.data:
                 return None
-            
+
             return Chat(**response.data[0])
-        
+
         except Exception as e:
             logger.error(f"Error getting chat: {e}")
             return None
-    
+
+    # ===== CONTEXT CACHE METADATA METHODS =====
+
+    async def get_chat_cache_name(self, chat_id: UUID) -> Optional[str]:
+        """
+        Получить cache_name из metadata чата.
+
+        Args:
+            chat_id: UUID чата
+
+        Returns:
+            cache_name или None
+        """
+        try:
+            response = (
+                self.client.table("chats")
+                .select("metadata")
+                .eq("id", str(chat_id))
+                .execute()
+            )
+
+            if not response.data:
+                return None
+
+            metadata = response.data[0].get("metadata") or {}
+            return metadata.get("gemini_cache_name")
+
+        except Exception as e:
+            logger.error(f"Error getting chat cache name: {e}")
+            return None
+
+    async def set_chat_cache_name(
+        self,
+        chat_id: UUID,
+        cache_name: str,
+        model_name: str,
+    ) -> bool:
+        """
+        Установить cache_name в metadata чата.
+
+        Args:
+            chat_id: UUID чата
+            cache_name: Полное имя кэша от Google API
+            model_name: Модель для которой создан кэш
+
+        Returns:
+            True если успешно
+        """
+        try:
+            # Получаем текущую metadata
+            response = (
+                self.client.table("chats")
+                .select("metadata")
+                .eq("id", str(chat_id))
+                .execute()
+            )
+
+            if not response.data:
+                return False
+
+            current_metadata = response.data[0].get("metadata") or {}
+
+            # Обновляем metadata с информацией о кэше
+            current_metadata["gemini_cache_name"] = cache_name
+            current_metadata["gemini_cache_model"] = model_name
+            current_metadata["gemini_cache_created_at"] = datetime.utcnow().isoformat()
+
+            # Сохраняем обновленную metadata
+            self.client.table("chats").update({
+                "metadata": current_metadata,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", str(chat_id)).execute()
+
+            logger.info(f"Set cache name for chat {chat_id}: {cache_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error setting chat cache name: {e}")
+            return False
+
+    async def get_chat_cache_model(self, chat_id: UUID) -> Optional[str]:
+        """
+        Получить модель для которой создан кэш.
+
+        Args:
+            chat_id: UUID чата
+
+        Returns:
+            Имя модели или None
+        """
+        try:
+            response = (
+                self.client.table("chats")
+                .select("metadata")
+                .eq("id", str(chat_id))
+                .execute()
+            )
+
+            if not response.data:
+                return None
+
+            metadata = response.data[0].get("metadata") or {}
+            return metadata.get("gemini_cache_model")
+
+        except Exception as e:
+            logger.error(f"Error getting chat cache model: {e}")
+            return None
+
+    async def clear_chat_cache_name(self, chat_id: UUID) -> bool:
+        """
+        Удалить cache_name из metadata чата.
+
+        Args:
+            chat_id: UUID чата
+
+        Returns:
+            True если успешно
+        """
+        try:
+            # Получаем текущую metadata
+            response = (
+                self.client.table("chats")
+                .select("metadata")
+                .eq("id", str(chat_id))
+                .execute()
+            )
+
+            if not response.data:
+                return False
+
+            current_metadata = response.data[0].get("metadata") or {}
+
+            # Удаляем ключи кэша
+            current_metadata.pop("gemini_cache_name", None)
+            current_metadata.pop("gemini_cache_model", None)
+            current_metadata.pop("gemini_cache_created_at", None)
+
+            # Сохраняем обновленную metadata
+            self.client.table("chats").update({
+                "metadata": current_metadata,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", str(chat_id)).execute()
+
+            logger.info(f"Cleared cache name for chat {chat_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error clearing chat cache name: {e}")
+            return False
+
+    # ===== END CONTEXT CACHE METADATA METHODS =====
+
     async def get_user_chats(self, user_id: UUID, limit: int = 50) -> List[Chat]:
         """
         Получить чаты пользователя.

@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     llm_log_dir: str = Field(default="logs", alias="LLM_LOG_DIR")
     llm_log_truncate_chars: int = Field(default=20000, alias="LLM_LOG_TRUNCATE_CHARS")
     
+    # Context Cache (Gemini API) - кэширование контекста диалога
+    context_cache_ttl_seconds: int = Field(default=900, alias="CONTEXT_CACHE_TTL_SECONDS")
+
     # Evidence Render Cache (LRU)
     evidence_cache_enabled: bool = Field(default=True, alias="EVIDENCE_CACHE_ENABLED")
     evidence_cache_dir: str = Field(default="", alias="EVIDENCE_CACHE_DIR")

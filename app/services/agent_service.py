@@ -127,7 +127,121 @@ class AgentService:
         self.search_service = SearchService(projects_db, s3_client)
         self.evidence_service = EvidenceService()
         self.document_extract_service = DocumentExtractService(self.llm_service)
-    
+
+    # ===== CONTEXT CACHING METHODS =====
+
+    async def _get_or_create_context_cache(
+        self,
+        chat_id: UUID,
+        document_context: str,
+        system_prompt: str,
+        model_name: str,
+    ) -> Optional[str]:
+        """
+        Получить существующий кэш контекста или создать новый.
+
+        Args:
+            chat_id: ID чата
+            document_context: Контекст документов для кэширования
+            system_prompt: Системный промпт
+            model_name: Имя модели
+
+        Returns:
+            cache_name или None если кэширование не удалось
+        """
+        try:
+            from google.genai import types as genai_types
+        except ImportError:
+            logger.warning("google-genai not available for context caching")
+            return None
+
+        # Проверяем, есть ли у чата существующий кэш
+        existing_cache = await self.supabase.get_chat_cache_name(chat_id)
+        existing_model = await self.supabase.get_chat_cache_model(chat_id)
+
+        # Если кэш существует и модель совпадает - проверяем его валидность
+        if existing_cache and existing_model == model_name:
+            if await self.llm_service.check_cache_exists(existing_cache):
+                # Кэш валиден - обновляем TTL
+                await self.llm_service.update_cache_ttl(existing_cache)
+                logger.info(f"Using existing cache for chat {chat_id}: {existing_cache}")
+                return existing_cache
+            else:
+                # Кэш истёк - очищаем metadata
+                await self.supabase.clear_chat_cache_name(chat_id)
+                logger.info(f"Cache expired for chat {chat_id}, will create new")
+
+        # Проверяем минимальный размер контекста (2048 токенов ~ 8000 символов)
+        if len(document_context) < 8000:
+            logger.info(f"Context too small for caching: {len(document_context)} chars")
+            return None
+
+        # Формируем контент для кэширования
+        cache_contents = [
+            genai_types.Content(
+                role="user",
+                parts=[genai_types.Part(text=document_context)]
+            )
+        ]
+
+        # Создаём новый кэш
+        cache_name = await self.llm_service.create_context_cache(
+            chat_id=str(chat_id),
+            document_contents=cache_contents,
+            system_instruction=system_prompt,
+            model_name=model_name,
+        )
+
+        if cache_name:
+            # Сохраняем в metadata чата
+            await self.supabase.set_chat_cache_name(chat_id, cache_name, model_name)
+            logger.info(f"Created new cache for chat {chat_id}: {cache_name}")
+
+        return cache_name
+
+    async def _build_message_history(
+        self,
+        chat_id: UUID,
+        limit: int = 20,
+    ) -> Optional[list]:
+        """
+        Получить историю сообщений чата для передачи в LLM.
+
+        Args:
+            chat_id: ID чата
+            limit: Максимальное количество сообщений
+
+        Returns:
+            Список Content для Gemini или None
+        """
+        try:
+            # Получаем сообщения из БД
+            messages = await self.supabase.get_chat_messages(chat_id, limit=limit)
+
+            if len(messages) < 2:
+                # Нет истории для передачи (только текущее сообщение)
+                return None
+
+            # Исключаем последнее сообщение (текущее, оно передаётся отдельно)
+            history_messages = messages[:-1]
+
+            if not history_messages:
+                return None
+
+            # Преобразуем в формат Gemini
+            history_contents = self.llm_service.build_history_contents(history_messages)
+
+            if history_contents:
+                logger.info(f"Built message history for chat {chat_id}: {len(history_contents)} messages")
+
+            return history_contents
+
+        except Exception as e:
+            logger.warning(f"Failed to build message history for chat {chat_id}: {e}")
+            return None
+
+    # ===== END CONTEXT CACHING METHODS =====
+
     async def process_message(
         self,
         chat_id: UUID,
@@ -945,6 +1059,22 @@ class AgentService:
             )
             google_files = self._merge_google_files(google_files, material_files)
 
+        # Получаем кэш контекста и историю сообщений
+        model_name = settings.default_flash_model or settings.default_model
+        cache_name = await self._get_or_create_context_cache(
+            chat_id=chat_id,
+            document_context=full_context,
+            system_prompt=system_prompt,
+            model_name=model_name,
+        )
+        history_contents = await self._build_message_history(chat_id)
+
+        if llm_logger:
+            llm_logger.log_section("CONTEXT_CACHE", {
+                "cache_name": cache_name,
+                "history_messages": len(history_contents) if history_contents else 0,
+            })
+
         while iteration < max_iterations:
             iteration += 1
             logger.info(f"Flash-only iteration {iteration}")
@@ -970,8 +1100,10 @@ class AgentService:
                 system_prompt=system_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
-                model_name=settings.default_flash_model or settings.default_model,
+                model_name=model_name,
                 return_text=True,
+                cached_content=cache_name,
+                history_contents=history_contents,
             )
             if llm_logger:
                 llm_logger.log_response(phase=f"simple_answer_{iteration}", response_text=raw_text)
@@ -1155,6 +1287,10 @@ class AgentService:
             role="assistant",
             content=final_answer.answer_markdown,
         )
+
+        # Обновляем TTL кэша после успешного ответа
+        if cache_name:
+            await self.llm_service.update_cache_ttl(cache_name)
 
         # Link rendered images to user message (so they appear before assistant response)
         if user_message_id and materials_json:
@@ -1791,6 +1927,24 @@ class AgentService:
 
         # Этап 3: Pro отвечает
         yield self._create_phase_event("pro_stage", "Pro формирует ответ...")
+
+        # Получаем кэш контекста и историю сообщений для Pro модели
+        pro_model_name = settings.default_pro_model or settings.default_model
+        full_context = self._combine_document_texts(payloads) or context_text
+        cache_name = await self._get_or_create_context_cache(
+            chat_id=chat_id,
+            document_context=full_context,
+            system_prompt=pro_prompt,
+            model_name=pro_model_name,
+        )
+        history_contents = await self._build_message_history(chat_id)
+
+        if llm_logger:
+            llm_logger.log_section("CONTEXT_CACHE_PRO", {
+                "cache_name": cache_name,
+                "history_messages": len(history_contents) if history_contents else 0,
+            })
+
         max_iterations = 10
         iteration = 0
         final_answer: Optional[AnswerResponse] = None
@@ -1812,12 +1966,13 @@ class AgentService:
             accumulated_thinking = ""
             prev_display_text = ""  # Для вычисления delta markdown
             raw_text = ""  # Инициализируем для безопасности
-            model_name = settings.default_pro_model or settings.default_model
             async for chunk in self.llm_service.stream_answer(
                 system_prompt=pro_prompt,
                 user_message=user_prompt,
                 google_file_uris=google_files if google_files else None,
-                model_name=model_name,
+                model_name=pro_model_name,
+                cached_content=cache_name,
+                history_contents=history_contents,
             ):
                 chunk_type = chunk.get("type", "")
                 content = chunk.get("content", "")
@@ -1975,6 +2130,10 @@ class AgentService:
             role="assistant",
             content=final_answer.answer_markdown,
         )
+
+        # Обновляем TTL кэша после успешного ответа
+        if cache_name:
+            await self.llm_service.update_cache_ttl(cache_name)
 
         # Link rendered images to user message (so they appear before assistant response)
         if user_message_id and materials_json:

@@ -52,7 +52,125 @@ class LLMService:
         # Инициализация клиента Gemini
         self.client = genai.Client(api_key=api_key)
         self.model_name = settings.default_model
-    
+
+    # ===== CONTEXT CACHING METHODS =====
+
+    async def create_context_cache(
+        self,
+        chat_id: str,
+        document_contents: List["genai_types.Content"],
+        system_instruction: str,
+        model_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Создать кэш контекста для документов.
+
+        Args:
+            chat_id: ID чата для display_name
+            document_contents: Контент документов для кэширования
+            system_instruction: Системный промпт
+            model_name: Имя модели (опционально)
+
+        Returns:
+            cache_name (str) или None при ошибке
+        """
+        try:
+            ttl_seconds = settings.context_cache_ttl_seconds
+
+            cache = self.client.caches.create(
+                model=model_name or self.model_name,
+                config={
+                    "display_name": f"chat_{chat_id}",
+                    "contents": document_contents,
+                    "system_instruction": system_instruction,
+                    "ttl": f"{ttl_seconds}s",
+                }
+            )
+
+            logger.info(f"Context cache created: {cache.name} for chat {chat_id}, TTL={ttl_seconds}s")
+            return cache.name
+
+        except Exception as e:
+            logger.warning(f"Failed to create context cache for chat {chat_id}: {e}")
+            return None
+
+    async def update_cache_ttl(self, cache_name: str) -> bool:
+        """
+        Обновить TTL существующего кэша.
+
+        Args:
+            cache_name: Полное имя кэша
+
+        Returns:
+            True если успешно, False при ошибке
+        """
+        try:
+            ttl_seconds = settings.context_cache_ttl_seconds
+
+            self.client.caches.update(
+                name=cache_name,
+                config={"ttl": f"{ttl_seconds}s"}
+            )
+
+            logger.info(f"Cache TTL updated: {cache_name}, new TTL={ttl_seconds}s")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to update cache TTL {cache_name}: {e}")
+            return False
+
+    async def check_cache_exists(self, cache_name: str) -> bool:
+        """
+        Проверить существование кэша.
+
+        Args:
+            cache_name: Полное имя кэша
+
+        Returns:
+            True если кэш существует, False если нет или ошибка
+        """
+        try:
+            self.client.caches.get(name=cache_name)
+            return True
+        except Exception:
+            return False
+
+    def build_history_contents(
+        self,
+        messages: List["Message"],
+    ) -> List["genai_types.Content"]:
+        """
+        Преобразовать историю сообщений из БД в формат Gemini.
+
+        Args:
+            messages: Список сообщений из БД
+
+        Returns:
+            Список Content для Gemini API
+        """
+        from app.models.internal import Message
+
+        contents: List["genai_types.Content"] = []
+
+        for msg in messages:
+            # Пропускаем системные сообщения (они идут в system_instruction)
+            if msg.role == "system":
+                continue
+
+            # Маппинг ролей: assistant -> model
+            role = "model" if msg.role == "assistant" else "user"
+
+            contents.append(
+                genai_types.Content(
+                    role=role,
+                    parts=[genai_types.Part(text=msg.content)]
+                )
+            )
+
+        return contents
+
+    # ===== END CONTEXT CACHING METHODS =====
+
     async def load_system_prompts(self, supabase: SupabaseClient) -> str:
         """
         Загрузить и скомпоновать системные промпты.
@@ -211,9 +329,16 @@ class LLMService:
     def _build_generation_config(
         self,
         system_prompt: str,
-        response_schema: Optional[dict] = None
+        response_schema: Optional[dict] = None,
+        cached_content: Optional[str] = None,
     ) -> "genai_types.GenerateContentConfig":
-        """Сформировать конфигурацию генерации с учётом настроек пользователя."""
+        """Сформировать конфигурацию генерации с учётом настроек пользователя.
+
+        Args:
+            system_prompt: Системный промпт (игнорируется если cached_content)
+            response_schema: JSON schema для ответа
+            cached_content: Имя кэша контекста (если есть, system_instruction не используется)
+        """
         user_settings = self.user.settings
         temperature = getattr(user_settings, "temperature", None) or settings.llm_temperature
         top_p = getattr(user_settings, "top_p", None) or settings.llm_top_p
@@ -225,8 +350,13 @@ class LLMService:
             "temperature": temperature,
             "top_p": top_p,
             "max_output_tokens": settings.max_tokens,
-            "system_instruction": system_prompt,
         }
+
+        # Если используется кэш, system_instruction уже в кэше
+        if cached_content:
+            config_params["cached_content"] = cached_content
+        else:
+            config_params["system_instruction"] = system_prompt
 
         if thinking_enabled and hasattr(genai_types, "ThinkingConfig"):
             config_params["thinking_config"] = genai_types.ThinkingConfig(
@@ -251,9 +381,26 @@ class LLMService:
     def _build_contents(
         self,
         user_message: str,
-        google_file_uris: Optional[Iterable[Union[dict, str]]] = None
+        google_file_uris: Optional[Iterable[Union[dict, str]]] = None,
+        history_contents: Optional[List["genai_types.Content"]] = None,
     ) -> List["genai_types.Content"]:
-        """Сформировать contents для Gemini."""
+        """Сформировать contents для Gemini.
+
+        Args:
+            user_message: Текущее сообщение пользователя
+            google_file_uris: URI файлов из Google File API
+            history_contents: Предыдущие сообщения (история диалога)
+
+        Returns:
+            Список Content: [история...] + [текущее сообщение]
+        """
+        contents: List["genai_types.Content"] = []
+
+        # Добавляем историю диалога если есть
+        if history_contents:
+            contents.extend(history_contents)
+
+        # Формируем текущее сообщение пользователя
         parts: List[Any] = []
         if google_file_uris:
             for uri_item in google_file_uris:
@@ -266,7 +413,9 @@ class LLMService:
                 if uri:
                     parts.append(genai_types.Part.from_uri(file_uri=uri, mime_type=mime))
         parts.append(genai_types.Part(text=user_message))
-        return [genai_types.Content(role="user", parts=parts)]
+        contents.append(genai_types.Content(role="user", parts=parts))
+
+        return contents
 
     async def generate_json_response(
         self,
@@ -276,11 +425,27 @@ class LLMService:
         google_file_uris: Optional[Iterable[Union[dict, str]]] = None,
         response_schema: Optional[dict] = None,
         model_name: Optional[str] = None,
+        cached_content: Optional[str] = None,
+        history_contents: Optional[List["genai_types.Content"]] = None,
     ) -> str:
-        """Выполнить вызов LLM и вернуть JSON текст."""
+        """Выполнить вызов LLM и вернуть JSON текст.
+
+        Args:
+            system_prompt: Системный промпт (игнорируется если cached_content)
+            user_message: Сообщение пользователя
+            google_file_uris: URI файлов из Google File API
+            response_schema: JSON schema для ответа
+            model_name: Имя модели
+            cached_content: Имя кэша контекста
+            history_contents: История диалога
+        """
         try:
-            contents = self._build_contents(user_message, google_file_uris)
-            config = self._build_generation_config(system_prompt, response_schema=response_schema)
+            contents = self._build_contents(user_message, google_file_uris, history_contents)
+            config = self._build_generation_config(
+                system_prompt,
+                response_schema=response_schema,
+                cached_content=cached_content,
+            )
             response = self.client.models.generate_content(
                 model=model_name or self.model_name,
                 contents=contents,
@@ -335,14 +500,28 @@ class LLMService:
         google_file_uris: Optional[Iterable[Union[dict, str]]] = None,
         model_name: Optional[str] = None,
         return_text: bool = False,
+        cached_content: Optional[str] = None,
+        history_contents: Optional[List["genai_types.Content"]] = None,
     ) -> Union[dict, tuple[dict, str]]:
-        """Запуск ответа (Flash или Pro) со строгим JSON."""
+        """Запуск ответа (Flash или Pro) со строгим JSON.
+
+        Args:
+            system_prompt: Системный промпт
+            user_message: Сообщение пользователя
+            google_file_uris: URI файлов
+            model_name: Имя модели
+            return_text: Вернуть также сырой текст
+            cached_content: Имя кэша контекста
+            history_contents: История диалога
+        """
         text = await self.generate_json_response(
             system_prompt=system_prompt,
             user_message=user_message,
             google_file_uris=google_file_uris,
             response_schema=get_answer_schema(),
             model_name=model_name,
+            cached_content=cached_content,
+            history_contents=history_contents,
         )
         parsed = self.parse_json(text)
         if return_text:
@@ -356,6 +535,8 @@ class LLMService:
         user_message: str,
         google_file_uris: Optional[Iterable[Union[dict, str]]] = None,
         model_name: Optional[str] = None,
+        cached_content: Optional[str] = None,
+        history_contents: Optional[List["genai_types.Content"]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Стриминг ответа с поддержкой thinking и текста.
 
@@ -366,6 +547,8 @@ class LLMService:
             user_message: Сообщение пользователя
             google_file_uris: URI файлов из Google File API
             model_name: Имя модели (опционально)
+            cached_content: Имя кэша контекста
+            history_contents: История диалога
 
         Yields:
             {"type": "thinking", "content": str} - для thinking токенов
@@ -373,8 +556,12 @@ class LLMService:
             {"type": "done", "accumulated": str} - финальный накопленный текст
         """
         try:
-            contents = self._build_contents(user_message, google_file_uris)
-            config = self._build_generation_config(system_prompt, response_schema=get_answer_schema())
+            contents = self._build_contents(user_message, google_file_uris, history_contents)
+            config = self._build_generation_config(
+                system_prompt,
+                response_schema=get_answer_schema(),
+                cached_content=cached_content,
+            )
 
             accumulated = ""
             response = self.client.models.generate_content_stream(
