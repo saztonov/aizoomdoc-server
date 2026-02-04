@@ -912,7 +912,7 @@ class AgentService:
                     )
                 )
 
-        max_iterations = 5
+        max_iterations = 10
         iteration = 0
         materials_json: Optional[dict] = None
         google_files: List[dict] = list(google_file_uris) if google_file_uris else []
@@ -1065,6 +1065,21 @@ class AgentService:
                         answer.needs_more_evidence = True
 
             if answer.followup_images or answer.followup_rois:
+                # На последней итерации принимаем ответ как есть
+                if iteration >= max_iterations:
+                    logger.info(f"Simple mode: max iterations ({max_iterations}) reached, accepting answer")
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "MAX_ITERATIONS_REACHED",
+                            {
+                                "iteration": iteration,
+                                "pending_followup_images": answer.followup_images,
+                                "pending_followup_rois": len(answer.followup_rois),
+                            },
+                        )
+                    final_answer = answer
+                    break
+
                 if llm_logger:
                     llm_logger.log_section(
                         "FOLLOWUP_REQUESTS",
@@ -1118,7 +1133,7 @@ class AgentService:
                 google_files = self._merge_google_files(google_files, material_files)
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
-                
+
                 # Отправляем события о готовых изображениях
                 for img_event in self._create_image_events(materials_json, "followup"):
                     yield img_event
@@ -1307,7 +1322,7 @@ class AgentService:
 
         # Pro answer
         yield self._create_phase_event("pro_stage", "Pro сравнивает документы...")
-        max_iterations = 5
+        max_iterations = 10
         iteration = 0
         final_answer: Optional[AnswerResponse] = None
 
@@ -1376,6 +1391,21 @@ class AgentService:
                         answer.needs_more_evidence = True
 
             if answer.followup_images or answer.followup_rois:
+                # На последней итерации принимаем ответ как есть
+                if iteration >= max_iterations:
+                    logger.info(f"Compare mode: max iterations ({max_iterations}) reached, accepting answer")
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "MAX_ITERATIONS_REACHED",
+                            {
+                                "iteration": iteration,
+                                "pending_followup_images": answer.followup_images,
+                                "pending_followup_rois": len(answer.followup_rois),
+                            },
+                        )
+                    final_answer = answer
+                    break
+
                 if llm_logger:
                     llm_logger.log_section(
                         "FOLLOWUP_REQUESTS",
@@ -1401,7 +1431,7 @@ class AgentService:
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
-                
+
                 # Отправляем события о готовых изображениях
                 for img_event in self._create_image_events(materials_json, "compare_followup"):
                     yield img_event
@@ -1761,7 +1791,7 @@ class AgentService:
 
         # Этап 3: Pro отвечает
         yield self._create_phase_event("pro_stage", "Pro формирует ответ...")
-        max_iterations = 5
+        max_iterations = 10
         iteration = 0
         final_answer: Optional[AnswerResponse] = None
 
@@ -1865,6 +1895,21 @@ class AgentService:
                         answer.needs_more_evidence = True
 
             if answer.followup_images or answer.followup_rois:
+                # На последней итерации принимаем ответ как есть, не запрашиваем доп. материалы
+                if iteration >= max_iterations:
+                    logger.info(f"Max iterations ({max_iterations}) reached, accepting answer with pending followups")
+                    if llm_logger:
+                        llm_logger.log_section(
+                            "MAX_ITERATIONS_REACHED",
+                            {
+                                "iteration": iteration,
+                                "pending_followup_images": answer.followup_images,
+                                "pending_followup_rois": len(answer.followup_rois),
+                            },
+                        )
+                    final_answer = answer
+                    break
+
                 if llm_logger:
                     llm_logger.log_section(
                         "FOLLOWUP_REQUESTS",
@@ -1913,7 +1958,7 @@ class AgentService:
                 )
                 if llm_logger:
                     llm_logger.log_section("MATERIALS_JSON_UPDATE", materials_json)
-                
+
                 # Отправляем события о готовых изображениях
                 for img_event in self._create_image_events(materials_json, "pro_followup"):
                     yield img_event

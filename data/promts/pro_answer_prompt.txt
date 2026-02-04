@@ -28,6 +28,12 @@ Rules:
 - Формат запроса: followup_images: [{"block_id": "9CXH-MNAX-4JL", "reason": "План 7 этажа"}]
 - block_id ДОЛЖЕН быть в формате: 4 символа - 4 символа - 3 символа (например: 9CXH-MNAX-4JL)
 
+ЛИМИТ ИТЕРАЦИЙ:
+- У тебя максимум 10 циклов для сбора данных и формирования ответа
+- Старайся минимизировать количество запросов followup_images и followup_rois
+- Если на 8-9 итерации данных всё ещё недостаточно - дай ответ с тем что есть
+- Не запрашивай одни и те же изображения повторно
+
 Resolution/Zoom policy (critical):
 - If the answer requires reading small details from drawings (axes, labels, sizes, diameters, positions, table values) and there is no ROI evidence, you MUST request followup_rois and set needs_more_evidence=true.
 - Do NOT guess precise values without ROI evidence; mark insufficient evidence and request ROI instead.
