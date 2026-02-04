@@ -77,25 +77,24 @@ class EvidenceService:
         cell_w = w / grid_size
         cell_h = h / grid_size
 
-        # Рисуем линии сетки (полупрозрачные красные)
-        line_color = (255, 0, 0, 100)
-        line_width = max(2, min(w, h) // 500)
+        # Рисуем линии сетки - кислотно-зелёные (Lime), полупрозрачные, толстые
+        lime_color = (0, 255, 0, 160)  # Lime с полупрозрачностью
+        line_width = max(6, min(w, h) // 200)
+
         for i in range(1, grid_size):
             x = int(i * cell_w)
             y = int(i * cell_h)
-            draw.line([(x, 0), (x, h)], fill=line_color, width=line_width)
-            draw.line([(0, y), (w, y)], fill=line_color, width=line_width)
+            draw.line([(x, 0), (x, h)], fill=lime_color, width=line_width)
+            draw.line([(0, y), (w, y)], fill=lime_color, width=line_width)
 
-        # Подписи секторов
+        # Подписи секторов - крупные, на непрозрачной подложке
         try:
-            font_size = max(20, min(w, h) // 15)
+            font_size = max(48, min(w, h) // 8)
             font = ImageFont.truetype("arial.ttf", size=font_size)
         except Exception:
             font = ImageFont.load_default()
 
         labels = ["A", "B", "C"][:grid_size]
-        text_color = (255, 0, 0, 200)
-        bg_color = (255, 255, 255, 180)
 
         for row in range(grid_size):
             for col in range(grid_size):
@@ -103,14 +102,23 @@ class EvidenceService:
                 cx = int((col + 0.5) * cell_w)
                 cy = int((row + 0.5) * cell_h)
 
-                # Белый фон под текстом для читаемости
+                # Непрозрачная подложка с чёрной рамкой
                 bbox = draw.textbbox((cx, cy), label, font=font, anchor="mm")
-                padding = 4
+                padding = 12
+                # Чёрная рамка (обводка прямоугольника)
                 draw.rectangle(
-                    [bbox[0] - padding, bbox[1] - padding, bbox[2] + padding, bbox[3] + padding],
-                    fill=bg_color
+                    [bbox[0] - padding - 3, bbox[1] - padding - 3,
+                     bbox[2] + padding + 3, bbox[3] + padding + 3],
+                    fill=(0, 0, 0, 255)
                 )
-                draw.text((cx, cy), label, fill=text_color, font=font, anchor="mm")
+                # Lime фон - непрозрачный
+                draw.rectangle(
+                    [bbox[0] - padding, bbox[1] - padding,
+                     bbox[2] + padding, bbox[3] + padding],
+                    fill=(0, 255, 0, 255)
+                )
+                # Чёрный текст на Lime фоне
+                draw.text((cx, cy), label, fill=(0, 0, 0, 255), font=font, anchor="mm")
 
         # Накладываем overlay на изображение
         result = Image.alpha_composite(img, overlay)
